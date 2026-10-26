@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Calendar,
   Clock,
@@ -92,7 +92,7 @@ export const InitiativePortfolioView: React.FC<InitiativePortfolioViewProps> = (
   const [newTitle, setNewTitle] = useState('');
   const [newOwner, setNewOwner] = useState('');
   const [newObjectiveId, setNewObjectiveId] = useState<number>(
-    db.objectives[0]?.id || 1
+    db.objectives.find((objective) => objective.org_id === selectedOrgId)?.id || 0
   );
   const [newStartDate, setNewStartDate] = useState('۱۴۰۵/۰۱/۱۵');
   const [newDueDate, setNewDueDate] = useState('۱۴۰۵/۰۹/۳۰');
@@ -102,7 +102,17 @@ export const InitiativePortfolioView: React.FC<InitiativePortfolioViewProps> = (
 
   // Objectives of current org & map
   const orgObjectives = useMemo(() => {
-    return db.objectives.filter((o) => o.org_id === selectedOrgId || o.org_id === 1);
+    return db.objectives.filter((o) => o.org_id === selectedOrgId);
+  }, [db.objectives, selectedOrgId]);
+
+  useEffect(() => {
+    const validObjectiveIds = new Set(
+      db.objectives.filter((objective) => objective.org_id === selectedOrgId).map((objective) => objective.id)
+    );
+    setNewObjectiveId((currentId) => {
+      if (validObjectiveIds.has(currentId)) return currentId;
+      return db.objectives.find((objective) => objective.org_id === selectedOrgId)?.id || 0;
+    });
   }, [db.objectives, selectedOrgId]);
 
   const objMap = useMemo(() => {
@@ -118,7 +128,7 @@ export const InitiativePortfolioView: React.FC<InitiativePortfolioViewProps> = (
     const list = db.initiatives || [];
     return list.filter((init) => {
       const obj = objMap.get(init.objective_id);
-      return obj && (obj.org_id === selectedOrgId || obj.org_id === 1);
+      return obj && obj.org_id === selectedOrgId;
     });
   }, [db.initiatives, objMap, selectedOrgId]);
 
@@ -176,8 +186,8 @@ export const InitiativePortfolioView: React.FC<InitiativePortfolioViewProps> = (
     initiatives.forEach((init) => {
       const prog = init.progress || 0;
       const planned = init.planned_progress ?? prog;
-      const budgetAlloc = init.budget_allocated || 50;
-      const budgetSp = init.budget_spent || (budgetAlloc * (prog / 100));
+      const budgetAlloc = init.budget_allocated ?? 50;
+      const budgetSp = init.budget_spent ?? (budgetAlloc * (prog / 100));
 
       sumProgress += prog;
       sumPlanned += planned;
@@ -194,7 +204,7 @@ export const InitiativePortfolioView: React.FC<InitiativePortfolioViewProps> = (
     const avgProgress = Math.round(sumProgress / total);
     const avgPlanned = Math.round(sumPlanned / total);
     const plannedValueTotal = initiatives.reduce(
-      (acc, i) => acc + (i.budget_allocated || 50) * ((i.planned_progress ?? i.progress) / 100),
+      (acc, i) => acc + (i.budget_allocated ?? 50) * ((i.planned_progress ?? i.progress) / 100),
       0
     );
 
@@ -245,15 +255,15 @@ export const InitiativePortfolioView: React.FC<InitiativePortfolioViewProps> = (
       if (i.id === initId) {
         let newStatus = i.status;
         if (val === 100) newStatus = 'completed';
-        else if (val < (i.planned_progress || val) - 15) newStatus = 'at_risk';
-        else if (val < (i.planned_progress || val) - 5) newStatus = 'behind';
+        else if (val < (i.planned_progress ?? val) - 15) newStatus = 'at_risk';
+        else if (val < (i.planned_progress ?? val) - 5) newStatus = 'behind';
         else newStatus = 'on_track';
 
         return {
           ...i,
           progress: val,
           status: newStatus,
-          budget_spent: Math.round(((i.budget_allocated || 50) * val) / 100),
+          budget_spent: Math.round(((i.budget_allocated ?? 50) * val) / 100),
         };
       }
       return i;
@@ -307,6 +317,10 @@ export const InitiativePortfolioView: React.FC<InitiativePortfolioViewProps> = (
   };
 
   const handleAddInitiative = () => {
+    if (!orgObjectives.some((objective) => objective.id === newObjectiveId)) {
+      showToast('برای این واحد سازمانی ابتدا یک هدف استراتژیک ثبت کنید.', 'error');
+      return;
+    }
     if (!newTitle.trim()) {
       showToast('لطفاً عنوان ابتکار استراتژیک را وارد کنید.', 'error');
       return;
@@ -873,15 +887,15 @@ export const InitiativePortfolioView: React.FC<InitiativePortfolioViewProps> = (
                   <div className="flex items-center gap-2">
                     <TrendingUp className="w-4 h-4 text-teal-400" />
                     <h3 className="text-sm font-bold text-white">
-                      منحنی تجمعی S (تحلیل پیشرفت برنامه‌ای PV، واقعی EV و هزینه AC)
+                      نمونه نمایشی منحنی S (غیرمتصل به تاریخچه واقعی PV/EV/AC)
                     </h3>
                   </div>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-teal-500/10 text-teal-400 border border-teal-500/20 font-medium">
-                    Earned Value Engine
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/20 font-medium">
+                    داده نمونه
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-400 mt-2">
-                  شکاف میان خط پیشرفت واقعی (EV) و پیشرفت برنامه‌ای (PV) نشان‌دهنده انحراف فیزیکی و نرخ تأخیر اجرای استراتژی است.
+                  مقادیر این نمودار نمایشی و ثابت‌اند؛ تا زمان ثبت تاریخچه پیشرفت و هزینه به تفکیک دوره، نباید برای ارزیابی واقعی یا تصمیم‌گیری مدیریتی استفاده شوند.
                 </p>
               </div>
 
@@ -969,7 +983,7 @@ export const InitiativePortfolioView: React.FC<InitiativePortfolioViewProps> = (
               </div>
 
               <div className="pt-3 border-t border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
-                <span>خط عمودی تیر ۱۴۰۵: موقعیت کنونی پایش دوره‌ای</span>
+                <span>نمایش نمونه؛ تاریخچه واقعی پروژه در دسترس نیست</span>
                 <span className="text-teal-400 font-semibold">
                   انحراف پیشرفت فعلی: {toFa(scurveData[6].planned - (scurveData[6].actual || 0))}٪ عقب‌ماندگی از برنامه
                 </span>
@@ -1036,7 +1050,7 @@ export const InitiativePortfolioView: React.FC<InitiativePortfolioViewProps> = (
               {/* Simulation Output Cards */}
               <div className="space-y-2 pt-2">
                 <div className="p-3 rounded-xl bg-purple-950/20 border border-purple-500/30 flex items-center justify-between text-xs">
-                  <span className="text-purple-300 font-medium">بهبود تخمینی شاخص SPI هلدینگ:</span>
+                  <span className="text-purple-300 font-medium">حساسیت فرضی SPI (نه پیش‌بینی):</span>
                   <span className="font-bold text-white font-mono">
                     {toFa(portfolioStats.spi)} ➔{' '}
                     <span className="text-emerald-400">
@@ -1046,7 +1060,7 @@ export const InitiativePortfolioView: React.FC<InitiativePortfolioViewProps> = (
                 </div>
 
                 <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 flex items-center justify-between text-xs">
-                  <span className="text-slate-400">جبران تاخیر پیش‌بینی‌شده:</span>
+                  <span className="text-slate-400">اثر فرضی تزریق بودجه:</span>
                   <span className="font-bold text-emerald-400">
                     +{toFa(Math.round(simExtraBudget * 0.4))}٪ جبران در افق ۳ ماهه
                   </span>
@@ -1056,7 +1070,7 @@ export const InitiativePortfolioView: React.FC<InitiativePortfolioViewProps> = (
               <div className="p-3 rounded-xl bg-slate-950/40 border border-slate-800/80 text-[11px] text-slate-400 flex items-start gap-2">
                 <Sparkles className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
                 <p>
-                  منحنی بنفش‌رنگ در نمودار مجاور، اثر مستقیم این مداخله را بر روی بازگشت به مسیر زمان‌بندی نشان می‌دهد.
+                  خروجی‌ها از ضرایب ساده نمایشی استفاده می‌کنند و به پروژه انتخاب‌شده یا مدل علّی تأییدشده متصل نیستند؛ برای پیش‌بینی واقعی باید مدل هزینه–پیشرفت کالیبره و داده‌های دوره‌ای ثبت شوند.
                 </p>
               </div>
             </div>
@@ -1195,7 +1209,7 @@ export const InitiativePortfolioView: React.FC<InitiativePortfolioViewProps> = (
                       </span>
                       <span>·</span>
                       <span className="text-amber-400 font-mono">
-                        {init.budget || `${toFa(init.budget_allocated || 0)} م.ر`}
+                        {init.budget || `${toFa(init.budget_allocated ?? 0)} م.ر`}
                       </span>
                     </div>
 

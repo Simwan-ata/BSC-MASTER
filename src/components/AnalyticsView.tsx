@@ -352,7 +352,9 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
       const actual = meas?.actual ?? null;
       const [score, status] = scoreIndicator(activeIndicator, target, actual);
 
-      if (target === null || actual === null) {
+      // A zero target has no valid denominator for percentage gap analysis.
+      // Treat it as unavailable rather than reporting an artificial 100% realization.
+      if (target === null || target === 0 || actual === null) {
         return {
           periodId: period.id,
           periodName: period.name,

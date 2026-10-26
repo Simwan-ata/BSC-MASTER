@@ -3,6 +3,7 @@ import {
   loadDatabase,
   saveDatabase,
   resetDatabase,
+  validateDatabasePayload,
   exportDatabaseJson,
   importDatabaseJson,
 } from './storage';
@@ -58,9 +59,19 @@ export default function App() {
   const [isBackupOpen, setIsBackupOpen] = useState(false);
 
   // Sync to localStorage whenever db changes
-  const updateDb = (newDb: DatabaseState) => {
+  const updateDb = (newDb: DatabaseState): boolean => {
+    if (!validateDatabasePayload(newDb)) {
+      setTimeout(() => showToast('تغییر ذخیره نشد؛ ساختار یا ارتباط داده‌ها معتبر نیست.', 'error'), 0);
+      return false;
+    }
+    if (!saveDatabase(newDb)) {
+      // Defer the error toast until the current handler finishes, so a subsequent
+      // success toast cannot mask a failed localStorage write.
+      setTimeout(() => showToast('ذخیره داده‌ها ناموفق بود؛ فضای ذخیره‌سازی مرورگر را بررسی کنید.', 'error'), 0);
+      return false;
+    }
     setDb(newDb);
-    saveDatabase(newDb);
+    return true;
   };
 
   // Selected Org and Period objects
@@ -112,8 +123,7 @@ export default function App() {
     if (existingIdx >= 0) {
       updatedMeasurements[existingIdx] = {
         ...updatedMeasurements[existingIdx],
-        target:
-          target !== null ? target : updatedMeasurements[existingIdx].target,
+        target,
         actual,
       };
     } else {
@@ -187,6 +197,31 @@ export default function App() {
           cascades: db.cascades.filter(
             (c) => c.child_id !== objectiveId && c.parent_id !== objectiveId
           ),
+          initiatives: (db.initiatives || []).filter((item) => item.objective_id !== objectiveId),
+          swotItems: (db.swotItems || []).map((item) => ({
+            ...item,
+            linked_objective_id: item.linked_objective_id === objectiveId ? undefined : item.linked_objective_id,
+          })),
+          swotStrategies: (db.swotStrategies || []).map((item) => ({
+            ...item,
+            linked_objective_id: item.linked_objective_id === objectiveId ? undefined : item.linked_objective_id,
+          })),
+          risks: (db.risks || []).map((item) => ({
+            ...item,
+            linked_objective_id: item.linked_objective_id === objectiveId ? undefined : item.linked_objective_id,
+          })),
+          pestelItems: (db.pestelItems || []).map((item) => ({
+            ...item,
+            linkedObjectiveId: item.linkedObjectiveId === objectiveId ? undefined : item.linkedObjectiveId,
+          })),
+          porterItems: (db.porterItems || []).map((item) => ({
+            ...item,
+            linkedObjectiveId: item.linkedObjectiveId === objectiveId ? undefined : item.linkedObjectiveId,
+          })),
+          vrioItems: (db.vrioItems || []).map((item) => ({
+            ...item,
+            linkedObjectiveId: item.linkedObjectiveId === objectiveId ? undefined : item.linkedObjectiveId,
+          })),
         });
         showToast('هدف استراتژیک با موفقیت حذف شد.');
         setConfirmDialog(null);
@@ -259,6 +294,34 @@ export default function App() {
     parentId: number,
     weight: number
   ) => {
+    if (childId === parentId || !Number.isFinite(weight) || weight <= 0) {
+      showToast('هدف‌ها یا وزن پیوند معتبر نیستند.', 'error');
+      return;
+    }
+    if (db.cascades.some((link) => link.child_id === childId && link.parent_id === parentId)) {
+      showToast('این پیوند هم‌راستایی از قبل ثبت شده است.', 'error');
+      return;
+    }
+
+    // Adding parent -> child is invalid if child already reaches parent.
+    const childrenByParent = new Map<number, number[]>();
+    for (const link of db.cascades) {
+      const children = childrenByParent.get(link.parent_id) ?? [];
+      children.push(link.child_id);
+      childrenByParent.set(link.parent_id, children);
+    }
+    const visited = new Set<number>();
+    const reachesParent = (nodeId: number): boolean => {
+      if (nodeId === parentId) return true;
+      if (visited.has(nodeId)) return false;
+      visited.add(nodeId);
+      return (childrenByParent.get(nodeId) ?? []).some(reachesParent);
+    };
+    if (reachesParent(childId)) {
+      showToast('این پیوند یک چرخه در ساختار هم‌راستایی ایجاد می‌کند.', 'error');
+      return;
+    }
+
     const newId = Math.max(...db.cascades.map((c) => c.id), 0) + 1;
     updateDb({
       ...db,
@@ -331,6 +394,11 @@ export default function App() {
     objectiveWeights: Record<number, number>,
     indicatorWeights: Record<number, number>
   ) => {
+    const allWeights = [...Object.values(objectiveWeights), ...Object.values(indicatorWeights)];
+    if (allWeights.some((weight) => !Number.isFinite(weight) || weight <= 0)) {
+      showToast('همه وزن‌ها باید اعداد متناهی و بزرگ‌تر از صفر باشند.', 'error');
+      return;
+    }
     const updatedObjectives = db.objectives.map((obj) => {
       if (objectiveWeights[obj.id] !== undefined) {
         return { ...obj, weight: objectiveWeights[obj.id] };
@@ -373,6 +441,10 @@ export default function App() {
 
   const handleReset = () => {
     const fresh = resetDatabase();
+    if (!fresh) {
+      showToast('بازنشانی ذخیره نشد؛ فضای ذخیره‌سازی مرورگر را بررسی کنید.', 'error');
+      return;
+    }
     setDb(fresh);
     setSelectedOrgId(fresh.orgs[1]?.id || fresh.orgs[0]?.id || 1);
     showToast('پایگاه داده به مقادیر اولیه بازنشانی شد.');

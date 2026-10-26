@@ -1312,7 +1312,7 @@ export const INITIAL_DATABASE: DatabaseState = {
       timeHorizon: 'medium',
       trend: 'increasing',
       strategicImplication: 'بازنگری ساختار حقوق و مزایای ارزی/ریالی، بسته‌های سهام تشویقی و برنامه‌های جانشین‌پروری شتاب‌یافته.',
-      linkedObjectiveId: 8,
+      linkedObjectiveId: 13,
     },
     {
       id: 7,
@@ -1538,7 +1538,7 @@ export const INITIAL_DATABASE: DatabaseState = {
       intensity: 4,
       trend: 'increasing',
       strategicResponse: 'احداث نیروگاه‌های خورشیدی اختصاصی و مخازن ذخیره‌سازی خوراک پشتیبان در سایت‌های تولیدی.',
-      linkedObjectiveId: 8,
+      linkedObjectiveId: 12,
     },
 
     // ۴. تهدید ورود تازه‌واردها (Threat of New Entrants)
@@ -1562,7 +1562,7 @@ export const INITIAL_DATABASE: DatabaseState = {
       intensity: 2,
       trend: 'stable',
       strategicResponse: 'توسعه ظرفیت مخازن اسکله هلدینگ و ارائه خدمات به شرکت‌های همجوار جهت ایجاد جریان درآمدی پایدار.',
-      linkedObjectiveId: 7,
+      linkedObjectiveId: 20,
     },
     {
       id: 12,
@@ -1573,7 +1573,7 @@ export const INITIAL_DATABASE: DatabaseState = {
       intensity: 3,
       trend: 'increasing',
       strategicResponse: 'پیش‌دستی در ارتقای کیفیت، انعقاد قراردادهای ۱۰ ساله با صنایع مصرف‌کننده و ورود به گریدهای دارویی و های‌تک.',
-      linkedObjectiveId: 6,
+      linkedObjectiveId: 10,
     },
 
     // ۵. تهدید محصولات جایگزین (Threat of Substitutes)
@@ -1618,7 +1618,7 @@ export const INITIAL_DATABASE: DatabaseState = {
       dynamic_capability_score: 8.8,
       economic_moat: 'wide',
       action_plan: 'هوشمندسازی سیستم پایش مخازن و اتصال مستقیم به پلتفرم تبادل اسناد گمرکی و بندری.',
-      linkedObjectiveId: 7,
+      linkedObjectiveId: 2,
     },
     {
       id: 2,
@@ -1633,7 +1633,7 @@ export const INITIAL_DATABASE: DatabaseState = {
       dynamic_capability_score: 9.2,
       economic_moat: 'wide',
       action_plan: 'گسترش همکاری با پارک‌های فناوری و راه‌اندازی شتاب‌دهنده ساخت کاتالیست‌های نسل پنجم.',
-      linkedObjectiveId: 6,
+      linkedObjectiveId: 13,
     },
     {
       id: 3,
@@ -1678,7 +1678,7 @@ export const INITIAL_DATABASE: DatabaseState = {
       dynamic_capability_score: 7.0,
       economic_moat: 'none',
       action_plan: 'یکپارچه‌سازی با سامانه مدیریت قطعات یدکی و شبیه‌سازی دیجیتال دوقلو (Digital Twin) برای خلق تمایز.',
-      linkedObjectiveId: 7,
+      linkedObjectiveId: 12,
     },
     {
       id: 6,
@@ -1693,7 +1693,7 @@ export const INITIAL_DATABASE: DatabaseState = {
       dynamic_capability_score: 9.0,
       economic_moat: 'wide',
       action_plan: 'برقراری مدل سهامداری انگیزشی در عواید پتنت‌ها و طرح‌های نوآوری.',
-      linkedObjectiveId: 8,
+      linkedObjectiveId: 13,
     },
     {
       id: 7,
@@ -1708,7 +1708,7 @@ export const INITIAL_DATABASE: DatabaseState = {
       dynamic_capability_score: 3.5,
       economic_moat: 'none',
       action_plan: 'استقرار هاب متمرکز زنجیره تأمین (Central Procurement) و استانداردسازی کدینگ کالاها.',
-      linkedObjectiveId: 7,
+      linkedObjectiveId: 22,
     },
   ],
 
