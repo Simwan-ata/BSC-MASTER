@@ -491,7 +491,10 @@ export function importDatabaseJson(
       }
       const migrated = normalized as DatabaseState;
       // Import is committed only after full validation and successful persistence.
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
+      // Reuse the normal save path so the pre-import database is retained for recovery.
+      if (!saveDatabase(migrated)) {
+        throw new Error('ذخیره نسخه واردشده ناموفق بود؛ داده فعلی تغییر نکرد.');
+      }
       onSuccess(migrated);
     } catch (error) {
       onError(error instanceof Error ? error.message : 'خطا در خواندن فایل JSON');
