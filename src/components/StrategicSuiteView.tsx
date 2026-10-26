@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { createStableId } from '../ids';
 import {
   Compass,
   TrendingUp,
@@ -130,7 +131,7 @@ export const StrategicSuiteView: React.FC<StrategicSuiteViewProps> = ({
     e.preventDefault();
     if (!newSwotTitle.trim()) return;
 
-    const newId = Math.max(...(db.swotItems || []).map((x) => x.id), 0) + 1;
+    const newId = createStableId((db.swotItems || []).map((x) => x.id));
     const newItem: SwotItem = {
       id: newId,
       org_id: selectedOrgId,
@@ -167,7 +168,7 @@ export const StrategicSuiteView: React.FC<StrategicSuiteViewProps> = ({
     e.preventDefault();
     if (!newStrategyTitle.trim()) return;
 
-    const newId = Math.max(...(db.swotStrategies || []).map((x) => x.id), 0) + 1;
+    const newId = createStableId((db.swotStrategies || []).map((x) => x.id));
     const newSt: SwotStrategy = {
       id: newId,
       org_id: selectedOrgId,
@@ -232,7 +233,7 @@ export const StrategicSuiteView: React.FC<StrategicSuiteViewProps> = ({
     if (!newBcgName.trim()) return;
 
     const quadrant = calcBcgQuadrant(newBcgGrowth, newBcgShare);
-    const newId = Math.max(...(db.bcgItems || []).map((x) => x.id), 0) + 1;
+    const newId = createStableId((db.bcgItems || []).map((x) => x.id));
     const newItem: BcgItem = {
       id: newId,
       org_id: selectedOrgId,
@@ -335,7 +336,7 @@ export const StrategicSuiteView: React.FC<StrategicSuiteViewProps> = ({
     e.preventDefault();
     if (!newRiskTitle.trim()) return;
 
-    const newId = Math.max(...(db.risks || []).map((x) => x.id), 0) + 1;
+    const newId = createStableId((db.risks || []).map((x) => x.id));
     const score = newRiskProb * newRiskImpact;
     const defaultCode = `RSK-${newRiskCat.slice(0, 3).toUpperCase()}-${String(newId).padStart(2, '0')}`;
 
