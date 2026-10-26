@@ -4,55 +4,80 @@ import { DatabaseState } from './types';
 const STORAGE_KEY = 'bsc_master_db_v1';
 const RECOVERY_KEY = 'bsc_master_recovery_v1';
 
-const REQUIRED_ARRAYS = [
-  'orgs', 'perspectives', 'periods', 'objectives', 'indicators',
-  'measurements', 'cascades', 'causes', 'initiatives', 'focusAreas', 'visions',
-] as const;
-const ID_ARRAYS = [
-  'orgs', 'perspectives', 'periods', 'objectives', 'indicators',
-  'measurements', 'cascades', 'causes', 'initiatives', 'focusAreas',
-] as const;
-const OPTIONAL_ARRAYS = [
+const CORE_ARRAYS = ['orgs', 'perspectives', 'periods', 'objectives', 'indicators', 'measurements'] as const;
+const LEGACY_ARRAYS = ['cascades', 'causes', 'initiatives', 'focusAreas', 'visions'] as const;
+const STRATEGY_ARRAYS = [
   'swotItems', 'swotStrategies', 'bcgItems', 'megaTrends', 'weakSignals',
   'wildCards', 'horizonInitiatives', 'uncertainties', 'scenarios', 'risks',
   'pestelItems', 'porterItems', 'vrioItems', 'spaceFactors',
 ] as const;
+const ID_ARRAYS = [
+  'orgs', 'perspectives', 'periods', 'objectives', 'indicators', 'measurements',
+  'cascades', 'causes', 'initiatives', 'focusAreas', 'swotItems', 'swotStrategies',
+  'bcgItems', 'megaTrends', 'weakSignals', 'wildCards', 'horizonInitiatives',
+  'scenarios', 'risks', 'pestelItems', 'porterItems', 'vrioItems', 'spaceFactors',
+] as const;
 
-function isRecord(value: unknown): value is Record<string, any> {
+type RecordValue = Record<string, any>;
+function isRecord(value: unknown): value is RecordValue {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+function finite(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
 }
 function hasUniqueNumericIds(items: unknown[]): boolean {
   const ids = items.map((item) => isRecord(item) ? item.id : undefined);
-  return ids.every((id) => typeof id === 'number' && Number.isFinite(id)) && new Set(ids).size === ids.length;
+  return ids.every(finite) && new Set(ids).size === ids.length;
 }
 
-/** Validate the core schema and its key relationships before loading or importing. */
+/**
+ * Backward-compatible normalization: only core scorecard collections are mandatory.
+ * Newer modules absent from an older backup are initialized empty, never seeded with
+ * unrelated demo records from INITIAL_DATABASE.
+ */
+function normalizeDatabase(value: unknown): unknown {
+  if (!isRecord(value) || !CORE_ARRAYS.every((key) => Array.isArray(value[key]))) return value;
+  const normalized: RecordValue = { ...value };
+  for (const key of LEGACY_ARRAYS) {
+    if (!Array.isArray(normalized[key])) normalized[key] = [];
+  }
+  for (const key of STRATEGY_ARRAYS) {
+    if (!Array.isArray(normalized[key])) normalized[key] = [];
+  }
+  return normalized;
+}
+
+/** Validate the core schema, uniqueness, numeric domains, and foreign-key integrity. */
 function validateDatabase(value: unknown): value is DatabaseState {
-  if (!isRecord(value) || !REQUIRED_ARRAYS.every((key) => Array.isArray(value[key]))) return false;
+  if (!isRecord(value) || !CORE_ARRAYS.every((key) => Array.isArray(value[key]))) return false;
+  if (![...LEGACY_ARRAYS, ...STRATEGY_ARRAYS].every((key) => Array.isArray(value[key]))) return false;
   const db = value as unknown as DatabaseState;
 
-  if (!db.orgs.every((x) => isRecord(x) && Number.isFinite(x.id) && typeof x.name === 'string')) return false;
-  if (!db.perspectives.every((x) => isRecord(x) && Number.isFinite(x.id) && Number.isFinite(x.order))) return false;
-  if (!db.periods.every((x) => isRecord(x) && Number.isFinite(x.id) && typeof x.name === 'string')) return false;
+  if (!db.orgs.every((x) => isRecord(x) && finite(x.id) && typeof x.name === 'string')) return false;
+  if (!db.perspectives.every((x) => isRecord(x) && finite(x.id) && finite(x.order) && typeof x.name === 'string')) return false;
+  if (!db.periods.every((x) => isRecord(x) && finite(x.id) && typeof x.name === 'string')) return false;
   if (!db.objectives.every((x) =>
-    isRecord(x) && Number.isFinite(x.id) && Number.isFinite(x.org_id) &&
-    Number.isFinite(x.perspective_id) && Number.isFinite(x.weight) && typeof x.title === 'string'
+    isRecord(x) && finite(x.id) && finite(x.org_id) && finite(x.perspective_id) &&
+    finite(x.weight) && x.weight > 0 && typeof x.title === 'string'
   )) return false;
   if (!db.indicators.every((x) =>
-    isRecord(x) && Number.isFinite(x.id) && Number.isFinite(x.objective_id) &&
-    Number.isFinite(x.weight) && typeof x.title === 'string' &&
-    (x.method === 'achievement' || x.method === 'threshold') && typeof x.higher_is_better === 'boolean'
+    isRecord(x) && finite(x.id) && finite(x.objective_id) && finite(x.weight) && x.weight > 0 &&
+    typeof x.title === 'string' && typeof x.higher_is_better === 'boolean' &&
+    (x.method === 'achievement' || x.method === 'threshold') &&
+    (x.cap === undefined || (finite(x.cap) && x.cap > 0)) &&
+    (x.yellow_limit === null || x.yellow_limit === undefined || finite(x.yellow_limit)) &&
+    (x.green_limit === null || x.green_limit === undefined || finite(x.green_limit))
   )) return false;
   if (!db.measurements.every((x) =>
-    isRecord(x) && Number.isFinite(x.id) && Number.isFinite(x.indicator_id) &&
-    Number.isFinite(x.period_id) &&
-    (x.target === null || (typeof x.target === 'number' && Number.isFinite(x.target))) &&
-    (x.actual === null || (typeof x.actual === 'number' && Number.isFinite(x.actual)))
+    isRecord(x) && finite(x.id) && finite(x.indicator_id) && finite(x.period_id) &&
+    (x.target === null || finite(x.target)) && (x.actual === null || finite(x.actual))
   )) return false;
 
   for (const key of ID_ARRAYS) {
-    if (!hasUniqueNumericIds(db[key] as unknown[])) return false;
+    const items = (db as any)[key];
+    if (!Array.isArray(items) || !hasUniqueNumericIds(items)) return false;
   }
+
   const orgIds = new Set(db.orgs.map((x) => x.id));
   const perspectiveIds = new Set(db.perspectives.map((x) => x.id));
   const periodIds = new Set(db.periods.map((x) => x.id));
@@ -62,21 +87,34 @@ function validateDatabase(value: unknown): value is DatabaseState {
   if (db.objectives.some((x) => !orgIds.has(x.org_id) || !perspectiveIds.has(x.perspective_id))) return false;
   if (db.indicators.some((x) => !objectiveIds.has(x.objective_id))) return false;
   if (db.measurements.some((x) => !indicatorIds.has(x.indicator_id) || !periodIds.has(x.period_id))) return false;
+
+  // One measurement per KPI and period avoids ambiguous .find()-based scoring.
+  const measurementKeys = db.measurements.map((x) => `${x.indicator_id}:${x.period_id}`);
+  if (new Set(measurementKeys).size !== measurementKeys.length) return false;
+
   if (db.cascades.some((x) =>
     !isRecord(x) || !objectiveIds.has(x.parent_id) || !objectiveIds.has(x.child_id) ||
-    x.parent_id === x.child_id || !Number.isFinite(x.weight) || x.weight < 0
+    x.parent_id === x.child_id || !finite(x.weight) || x.weight <= 0
   )) return false;
-  if (db.visions.some((x) => !isRecord(x) || !orgIds.has(x.org_id))) return false;
-  return true;
-}
+  if (db.causes.some((x) => !isRecord(x) || !objectiveIds.has(x.from_id) || !objectiveIds.has(x.to_id) || x.from_id === x.to_id)) return false;
+  if (db.initiatives.some((x) => !isRecord(x) || !objectiveIds.has(x.objective_id) || typeof x.title !== 'string')) return false;
+  if (db.focusAreas.some((x) => !isRecord(x) || !orgIds.has(x.org_id) || typeof x.title !== 'string')) return false;
+  if (db.visions.some((x) => !isRecord(x) || !orgIds.has(x.org_id) || typeof x.vision !== 'string')) return false;
 
-function migrateDatabase(value: DatabaseState): DatabaseState {
-  const migrated = { ...value } as DatabaseState;
-  for (const key of OPTIONAL_ARRAYS) {
-    const current = (migrated as any)[key];
-    (migrated as any)[key] = Array.isArray(current) ? current : (INITIAL_DATABASE as any)[key] ?? [];
+  const orgScopedArrays = [
+    'swotItems', 'swotStrategies', 'bcgItems', 'risks', 'pestelItems',
+    'porterItems', 'vrioItems', 'spaceFactors',
+  ] as const;
+  for (const key of orgScopedArrays) {
+    if ((db as any)[key].some((item: unknown) => !isRecord(item) || !orgIds.has(item.org_id))) return false;
   }
-  return migrated;
+  if (db.swotItems?.some((x) => x.linked_objective_id !== undefined && !objectiveIds.has(x.linked_objective_id))) return false;
+  if (db.swotStrategies?.some((x) => x.linked_objective_id !== undefined && !objectiveIds.has(x.linked_objective_id))) return false;
+  if (db.risks?.some((x) => x.linked_objective_id !== undefined && !objectiveIds.has(x.linked_objective_id))) return false;
+  if (db.pestelItems?.some((x) => x.linkedObjectiveId !== undefined && !objectiveIds.has(x.linkedObjectiveId))) return false;
+  if (db.porterItems?.some((x) => x.linkedObjectiveId !== undefined && !objectiveIds.has(x.linkedObjectiveId))) return false;
+  if (db.vrioItems?.some((x) => x.linkedObjectiveId !== undefined && !objectiveIds.has(x.linkedObjectiveId))) return false;
+  return true;
 }
 
 function preserveRecoveryCopy(raw: string): void {
@@ -104,13 +142,14 @@ export function loadDatabase(): DatabaseState {
       return INITIAL_DATABASE;
     }
 
-    if (!validateDatabase(parsed)) {
+    const normalized = normalizeDatabase(parsed);
+    if (!validateDatabase(normalized)) {
       preserveRecoveryCopy(raw);
       console.error('Stored BSC-MASTER data failed validation; a recovery copy was preserved.');
       return INITIAL_DATABASE;
     }
 
-    const migrated = migrateDatabase(parsed);
+    const migrated = normalized as DatabaseState;
     saveDatabase(migrated);
     return migrated;
   } catch (error) {
@@ -154,11 +193,12 @@ export function importDatabaseJson(
       const raw = event.target?.result;
       if (typeof raw !== 'string') throw new Error('محتوای فایل قابل خواندن نیست');
       const parsed: unknown = JSON.parse(raw);
-      if (!validateDatabase(parsed)) {
+      const normalized = normalizeDatabase(parsed);
+      if (!validateDatabase(normalized)) {
         throw new Error('ساختار یا روابط داده‌های فایل پشتیبان معتبر نیست؛ داده فعلی تغییر نکرد.');
       }
-      const migrated = migrateDatabase(parsed);
-      // Import is committed only after the full validation passes.
+      const migrated = normalized as DatabaseState;
+      // Import is committed only after full validation and successful persistence.
       localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
       onSuccess(migrated);
     } catch (error) {
