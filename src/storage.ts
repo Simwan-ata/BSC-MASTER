@@ -204,17 +204,18 @@ export function loadDatabase(): DatabaseState {
   }
 }
 
-export function saveDatabase(data: DatabaseState): void {
+export function saveDatabase(data: DatabaseState): boolean {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    return true;
   } catch (error) {
     console.error('Unable to save BSC-MASTER data. Check browser storage or export a backup.', error);
+    return false;
   }
 }
 
-export function resetDatabase(): DatabaseState {
-  saveDatabase(INITIAL_DATABASE);
-  return INITIAL_DATABASE;
+export function resetDatabase(): DatabaseState | null {
+  return saveDatabase(INITIAL_DATABASE) ? INITIAL_DATABASE : null;
 }
 
 export function exportDatabaseJson(data: DatabaseState): void {
