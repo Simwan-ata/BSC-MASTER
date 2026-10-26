@@ -6,8 +6,10 @@ import {
   validateDatabasePayload,
   exportDatabaseJson,
   importDatabaseJson,
+  deleteObjectiveCascade,
 } from './storage';
-import { DatabaseState, StatusType } from './types';
+import { DatabaseState, Indicator, StrategicInitiative, StatusType } from './types';
+import { createStableId } from './ids';
 import { buildScorecard } from './scoring';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
@@ -129,7 +131,7 @@ export default function App() {
       };
     } else {
       const newId =
-        Math.max(...db.measurements.map((m) => m.id), 0) + 1;
+        createStableId(db.measurements.map((m) => m.id));
       updatedMeasurements.push({
         id: newId,
         indicator_id: indicatorId,
@@ -152,7 +154,7 @@ export default function App() {
     weight: number;
     description?: string;
   }) => {
-    const newId = Math.max(...db.objectives.map((o) => o.id), 0) + 1;
+    const newId = createStableId(db.objectives.map((o) => o.id));
     const newObjective = {
       id: newId,
       ...data,
@@ -181,57 +183,16 @@ export default function App() {
       title: 'حذف هدف استراتژیک',
       message: 'آیا از حذف این هدف استراتژیک اطمینان دارید؟ تمامی شاخص‌ها و پیوندهای وابسته نیز حذف خواهند شد.',
       onConfirm: () => {
-        const indicatorIdsToRemove = db.indicators
-          .filter((i) => i.objective_id === objectiveId)
-          .map((i) => i.id);
-
-        updateDb({
-          ...db,
-          objectives: db.objectives.filter((o) => o.id !== objectiveId),
-          indicators: db.indicators.filter((i) => i.objective_id !== objectiveId),
-          measurements: db.measurements.filter(
-            (m) => !indicatorIdsToRemove.includes(m.indicator_id)
-          ),
-          causes: db.causes.filter(
-            (c) => c.from_id !== objectiveId && c.to_id !== objectiveId
-          ),
-          cascades: db.cascades.filter(
-            (c) => c.child_id !== objectiveId && c.parent_id !== objectiveId
-          ),
-          initiatives: (db.initiatives || []).filter((item) => item.objective_id !== objectiveId),
-          swotItems: (db.swotItems || []).map((item) => ({
-            ...item,
-            linked_objective_id: item.linked_objective_id === objectiveId ? undefined : item.linked_objective_id,
-          })),
-          swotStrategies: (db.swotStrategies || []).map((item) => ({
-            ...item,
-            linked_objective_id: item.linked_objective_id === objectiveId ? undefined : item.linked_objective_id,
-          })),
-          risks: (db.risks || []).map((item) => ({
-            ...item,
-            linked_objective_id: item.linked_objective_id === objectiveId ? undefined : item.linked_objective_id,
-          })),
-          pestelItems: (db.pestelItems || []).map((item) => ({
-            ...item,
-            linkedObjectiveId: item.linkedObjectiveId === objectiveId ? undefined : item.linkedObjectiveId,
-          })),
-          porterItems: (db.porterItems || []).map((item) => ({
-            ...item,
-            linkedObjectiveId: item.linkedObjectiveId === objectiveId ? undefined : item.linkedObjectiveId,
-          })),
-          vrioItems: (db.vrioItems || []).map((item) => ({
-            ...item,
-            linkedObjectiveId: item.linkedObjectiveId === objectiveId ? undefined : item.linkedObjectiveId,
-          })),
-        });
+        const nextDb = deleteObjectiveCascade(db, objectiveId);
+        updateDb(nextDb);
         showToast('هدف استراتژیک با موفقیت حذف شد.');
         setConfirmDialog(null);
       },
     });
   };
 
-  const handleAddIndicator = (data: any) => {
-    const newId = Math.max(...db.indicators.map((i) => i.id), 0) + 1;
+  const handleAddIndicator = (data: Omit<Indicator, 'id'>) => {
+    const newId = createStableId(db.indicators.map((i) => i.id));
     const newIndicator = {
       id: newId,
       ...data,
@@ -260,7 +221,7 @@ export default function App() {
   };
 
   const handleAddOrg = (data: { name: string; parent_id: number | null }) => {
-    const newId = Math.max(...db.orgs.map((o) => o.id), 0) + 1;
+    const newId = createStableId(db.orgs.map((o) => o.id));
     const newOrg = {
       id: newId,
       ...data,
@@ -274,7 +235,7 @@ export default function App() {
   };
 
   const handleAddCause = (fromId: number, toId: number) => {
-    const newId = Math.max(...db.causes.map((c) => c.id), 0) + 1;
+    const newId = createStableId(db.causes.map((c) => c.id));
     updateDb({
       ...db,
       causes: [...db.causes, { id: newId, from_id: fromId, to_id: toId }],
@@ -323,7 +284,7 @@ export default function App() {
       return;
     }
 
-    const newId = Math.max(...db.cascades.map((c) => c.id), 0) + 1;
+    const newId = createStableId(db.cascades.map((c) => c.id));
     updateDb({
       ...db,
       cascades: [
@@ -342,8 +303,8 @@ export default function App() {
     showToast('پیوند هم‌راستایی حذف شد.');
   };
 
-  const handleAddInitiative = (data: any) => {
-    const newId = Math.max(...(db.initiatives || []).map((i) => i.id), 0) + 1;
+  const handleAddInitiative = (data: Omit<StrategicInitiative, 'id'>) => {
+    const newId = createStableId((db.initiatives || []).map((i) => i.id));
     const newInit = { id: newId, ...data };
     updateDb({
       ...db,
