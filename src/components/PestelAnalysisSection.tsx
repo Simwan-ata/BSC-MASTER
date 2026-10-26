@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { createStableId } from '../ids';
 import {
   Globe,
   Building2,
@@ -369,7 +370,7 @@ export const PestelAnalysisSection: React.FC<PestelAnalysisSectionProps> = ({
       showToast('عامل کلان محیطی با موفقیت به‌روزرسانی شد');
     } else {
       // Add
-      const newId = Math.max(...currentItems.map((x) => x.id), 0) + 1;
+      const newId = createStableId(currentItems.map((x) => x.id));
       const newItem: PestelItem = {
         id: newId,
         org_id: selectedOrgId,
@@ -418,7 +419,7 @@ export const PestelAnalysisSection: React.FC<PestelAnalysisSectionProps> = ({
       return;
     }
 
-    const newSwotId = Math.max(...currentSwot.map((x) => x.id), 0) + 1;
+    const newSwotId = createStableId(currentSwot.map((x) => x.id));
     const newSwotItem: SwotItem = {
       id: newSwotId,
       org_id: selectedOrgId,
