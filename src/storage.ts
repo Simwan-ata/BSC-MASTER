@@ -46,7 +46,7 @@ function normalizeDatabase(value: unknown): unknown {
   }
 
   // Repair stale optional links in older saved databases without deleting records.
-  const objectiveIds = new Set(normalized.objectives.map((objective: RecordValue) => objective.id));
+  const objectiveIds = new Set(normalized.objectives.filter(isRecord).map((objective: RecordValue) => objective.id));
   const optionalObjectiveLinks = [
     ['swotItems', 'linked_objective_id'],
     ['swotStrategies', 'linked_objective_id'],
@@ -61,7 +61,7 @@ function normalizeDatabase(value: unknown): unknown {
       return { ...item, [field]: undefined };
     });
   }
-  const swotIds = new Set(normalized.swotItems.map((item: RecordValue) => item.id));
+  const swotIds = new Set(normalized.swotItems.filter(isRecord).map((item: RecordValue) => item.id));
   normalized.swotStrategies = normalized.swotStrategies.map((strategy: unknown) => {
     if (!isRecord(strategy) || !Array.isArray(strategy.related_swot_ids)) return strategy;
     return { ...strategy, related_swot_ids: strategy.related_swot_ids.filter((id: unknown) => swotIds.has(id)) };
