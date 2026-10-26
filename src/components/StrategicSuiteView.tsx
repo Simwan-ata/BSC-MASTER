@@ -112,12 +112,12 @@ export const StrategicSuiteView: React.FC<StrategicSuiteViewProps> = ({
   );
 
   const orgSwotItems = useMemo(() => {
-    return (db.swotItems || []).filter((item) => item.org_id === selectedOrgId || item.org_id === 1);
+    return (db.swotItems || []).filter((item) => item.org_id === selectedOrgId);
   }, [db.swotItems, selectedOrgId]);
 
   const orgSwotStrategies = useMemo(() => {
     return (db.swotStrategies || []).filter(
-      (st) => st.org_id === selectedOrgId || st.org_id === 1
+      (st) => st.org_id === selectedOrgId
     );
   }, [db.swotStrategies, selectedOrgId]);
 
@@ -206,7 +206,7 @@ export const StrategicSuiteView: React.FC<StrategicSuiteViewProps> = ({
 
   const orgBcgItems = useMemo(() => {
     return (db.bcgItems || []).filter(
-      (item) => item.org_id === selectedOrgId || item.org_id === 1
+      (item) => item.org_id === selectedOrgId
     );
   }, [db.bcgItems, selectedOrgId]);
 
@@ -306,7 +306,7 @@ export const StrategicSuiteView: React.FC<StrategicSuiteViewProps> = ({
 
   const orgRisks = useMemo(() => {
     return (db.risks || []).filter(
-      (r) => r.org_id === selectedOrgId || r.org_id === 1
+      (r) => r.org_id === selectedOrgId
     );
   }, [db.risks, selectedOrgId]);
 
