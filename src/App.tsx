@@ -192,6 +192,21 @@ export default function App() {
     });
   };
 
+  const handleUpdatePerspectiveWeight = (perspectiveId: number, weight: number) => {
+    if (!Number.isFinite(weight) || weight <= 0) {
+      showToast('وزن منظر باید عددی مثبت باشد.', 'error');
+      return;
+    }
+    const perspectives = db.perspectives.map((perspective) =>
+      perspective.id === perspectiveId ? { ...perspective, weight } : perspective
+    );
+    if (updateDb({ ...db, perspectives })) {
+      showToast('وزن منظر ذخیره شد.');
+    } else {
+      showToast('ذخیره وزن منظر ناموفق بود.', 'error');
+    }
+  };
+
   const handleAddIndicator = (data: Omit<Indicator, 'id'>) => {
     const newId = createStableId(db.indicators.map((i) => i.id));
     const newIndicator = {
@@ -485,6 +500,7 @@ export default function App() {
                   }}
                   onDeleteIndicator={handleDeleteIndicator}
                   onDeleteObjective={handleDeleteObjective}
+                  onUpdatePerspectiveWeight={handleUpdatePerspectiveWeight}
                 />
               )}
 
