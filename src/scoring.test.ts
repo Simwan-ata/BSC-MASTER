@@ -133,7 +133,7 @@ test('explicit perspective weights affect organization score; omitted weights de
   assert.equal(weighted.score, 87.5);
   assert.equal(weighted.coverage, 100);
 
-  db.perspectives = db.perspectives.map(({ weight: _weight, ...perspective }) => perspective);
+  db.perspectives.forEach((perspective) => { delete perspective.weight; });
   const equal = buildScorecard(db, 1, 1);
   assert.equal(equal.score, 75);
 });
