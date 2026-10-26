@@ -45,6 +45,7 @@ interface ScorecardViewProps {
   onOpenAddIndicator: (objectiveId: number) => void;
   onDeleteIndicator: (indicatorId: number) => void;
   onDeleteObjective: (objectiveId: number) => void;
+  onUpdatePerspectiveWeight: (perspectiveId: number, weight: number) => void;
 }
 
 const IndicatorRow: React.FC<{
@@ -262,6 +263,7 @@ export const ScorecardView: React.FC<ScorecardViewProps> = ({
   onOpenAddIndicator,
   onDeleteIndicator,
   onDeleteObjective,
+  onUpdatePerspectiveWeight,
 }) => {
   return (
     <div className="space-y-6">
@@ -355,6 +357,25 @@ export const ScorecardView: React.FC<ScorecardViewProps> = ({
                 <span aria-hidden="true" className="text-slate-300">·</span>
                 <span>پوشش {coverage !== null ? `${toFa(coverage)}٪` : '—'}</span>
               </div>
+              <label className="mt-2 flex items-center justify-between gap-2 text-[11px] text-slate-500">
+                <span>وزن منظر در امتیاز کل</span>
+                <input
+                  aria-label={`وزن منظر ${p.name}`}
+                  type="number"
+                  min="0.01"
+                  step="0.1"
+                  defaultValue={p.weight ?? 1}
+                  onBlur={(event) => {
+                    const weight = Number(event.currentTarget.value);
+                    if (Number.isFinite(weight) && weight > 0 && weight !== (p.weight ?? 1)) {
+                      onUpdatePerspectiveWeight(p.id, weight);
+                    } else if (!Number.isFinite(weight) || weight <= 0) {
+                      event.currentTarget.value = String(p.weight ?? 1);
+                    }
+                  }}
+                  className="w-16 rounded border border-slate-200 px-2 py-1 text-right text-xs text-slate-700"
+                />
+              </label>
             </div>
           );
         })}
