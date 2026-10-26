@@ -186,8 +186,8 @@ export const InitiativePortfolioView: React.FC<InitiativePortfolioViewProps> = (
     initiatives.forEach((init) => {
       const prog = init.progress || 0;
       const planned = init.planned_progress ?? prog;
-      const budgetAlloc = init.budget_allocated || 50;
-      const budgetSp = init.budget_spent || (budgetAlloc * (prog / 100));
+      const budgetAlloc = init.budget_allocated ?? 50;
+      const budgetSp = init.budget_spent ?? (budgetAlloc * (prog / 100));
 
       sumProgress += prog;
       sumPlanned += planned;
@@ -204,7 +204,7 @@ export const InitiativePortfolioView: React.FC<InitiativePortfolioViewProps> = (
     const avgProgress = Math.round(sumProgress / total);
     const avgPlanned = Math.round(sumPlanned / total);
     const plannedValueTotal = initiatives.reduce(
-      (acc, i) => acc + (i.budget_allocated || 50) * ((i.planned_progress ?? i.progress) / 100),
+      (acc, i) => acc + (i.budget_allocated ?? 50) * ((i.planned_progress ?? i.progress) / 100),
       0
     );
 
@@ -263,7 +263,7 @@ export const InitiativePortfolioView: React.FC<InitiativePortfolioViewProps> = (
           ...i,
           progress: val,
           status: newStatus,
-          budget_spent: Math.round(((i.budget_allocated || 50) * val) / 100),
+          budget_spent: Math.round(((i.budget_allocated ?? 50) * val) / 100),
         };
       }
       return i;
@@ -1209,7 +1209,7 @@ export const InitiativePortfolioView: React.FC<InitiativePortfolioViewProps> = (
                       </span>
                       <span>·</span>
                       <span className="text-amber-400 font-mono">
-                        {init.budget || `${toFa(init.budget_allocated || 0)} م.ر`}
+                        {init.budget || `${toFa(init.budget_allocated ?? 0)} م.ر`}
                       </span>
                     </div>
 
