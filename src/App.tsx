@@ -3,6 +3,7 @@ import {
   loadDatabase,
   saveDatabase,
   resetDatabase,
+  validateDatabasePayload,
   exportDatabaseJson,
   importDatabaseJson,
 } from './storage';
@@ -59,6 +60,10 @@ export default function App() {
 
   // Sync to localStorage whenever db changes
   const updateDb = (newDb: DatabaseState): boolean => {
+    if (!validateDatabasePayload(newDb)) {
+      setTimeout(() => showToast('تغییر ذخیره نشد؛ ساختار یا ارتباط داده‌ها معتبر نیست.', 'error'), 0);
+      return false;
+    }
     if (!saveDatabase(newDb)) {
       // Defer the error toast until the current handler finishes, so a subsequent
       // success toast cannot mask a failed localStorage write.
@@ -389,6 +394,11 @@ export default function App() {
     objectiveWeights: Record<number, number>,
     indicatorWeights: Record<number, number>
   ) => {
+    const allWeights = [...Object.values(objectiveWeights), ...Object.values(indicatorWeights)];
+    if (allWeights.some((weight) => !Number.isFinite(weight) || weight <= 0)) {
+      showToast('همه وزن‌ها باید اعداد متناهی و بزرگ‌تر از صفر باشند.', 'error');
+      return;
+    }
     const updatedObjectives = db.objectives.map((obj) => {
       if (objectiveWeights[obj.id] !== undefined) {
         return { ...obj, weight: objectiveWeights[obj.id] };
