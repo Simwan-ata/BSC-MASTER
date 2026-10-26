@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { createStableId } from '../ids';
 import {
   Compass,
   TrendingUp,
@@ -198,7 +199,7 @@ export const SpaceMatrixSection: React.FC<SpaceMatrixSectionProps> = ({
     }
 
     const newFactor: SpaceFactor = {
-      id: Date.now(),
+      id: createStableId((db.spaceFactors || []).map((item) => item.id)),
       org_id: selectedOrgId,
       dimension: newDim,
       name: newName.trim(),
