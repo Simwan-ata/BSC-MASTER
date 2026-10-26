@@ -187,6 +187,31 @@ export default function App() {
           cascades: db.cascades.filter(
             (c) => c.child_id !== objectiveId && c.parent_id !== objectiveId
           ),
+          initiatives: (db.initiatives || []).filter((item) => item.objective_id !== objectiveId),
+          swotItems: (db.swotItems || []).map((item) => ({
+            ...item,
+            linked_objective_id: item.linked_objective_id === objectiveId ? undefined : item.linked_objective_id,
+          })),
+          swotStrategies: (db.swotStrategies || []).map((item) => ({
+            ...item,
+            linked_objective_id: item.linked_objective_id === objectiveId ? undefined : item.linked_objective_id,
+          })),
+          risks: (db.risks || []).map((item) => ({
+            ...item,
+            linked_objective_id: item.linked_objective_id === objectiveId ? undefined : item.linked_objective_id,
+          })),
+          pestelItems: (db.pestelItems || []).map((item) => ({
+            ...item,
+            linkedObjectiveId: item.linkedObjectiveId === objectiveId ? undefined : item.linkedObjectiveId,
+          })),
+          porterItems: (db.porterItems || []).map((item) => ({
+            ...item,
+            linkedObjectiveId: item.linkedObjectiveId === objectiveId ? undefined : item.linkedObjectiveId,
+          })),
+          vrioItems: (db.vrioItems || []).map((item) => ({
+            ...item,
+            linkedObjectiveId: item.linkedObjectiveId === objectiveId ? undefined : item.linkedObjectiveId,
+          })),
         });
         showToast('هدف استراتژیک با موفقیت حذف شد.');
         setConfirmDialog(null);
@@ -259,6 +284,34 @@ export default function App() {
     parentId: number,
     weight: number
   ) => {
+    if (childId === parentId || !Number.isFinite(weight) || weight <= 0) {
+      showToast('هدف‌ها یا وزن پیوند معتبر نیستند.', 'error');
+      return;
+    }
+    if (db.cascades.some((link) => link.child_id === childId && link.parent_id === parentId)) {
+      showToast('این پیوند هم‌راستایی از قبل ثبت شده است.', 'error');
+      return;
+    }
+
+    // Adding parent -> child is invalid if child already reaches parent.
+    const childrenByParent = new Map<number, number[]>();
+    for (const link of db.cascades) {
+      const children = childrenByParent.get(link.parent_id) ?? [];
+      children.push(link.child_id);
+      childrenByParent.set(link.parent_id, children);
+    }
+    const visited = new Set<number>();
+    const reachesParent = (nodeId: number): boolean => {
+      if (nodeId === parentId) return true;
+      if (visited.has(nodeId)) return false;
+      visited.add(nodeId);
+      return (childrenByParent.get(nodeId) ?? []).some(reachesParent);
+    };
+    if (reachesParent(childId)) {
+      showToast('این پیوند یک چرخه در ساختار هم‌راستایی ایجاد می‌کند.', 'error');
+      return;
+    }
+
     const newId = Math.max(...db.cascades.map((c) => c.id), 0) + 1;
     updateDb({
       ...db,
