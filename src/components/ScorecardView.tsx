@@ -303,13 +303,21 @@ export const ScorecardView: React.FC<ScorecardViewProps> = ({
               score={scorecard.score}
               size="lg"
             />
+            <div className="mt-1 text-[10px] text-slate-300 text-center">
+              پوشش داده: {scorecard.coverage !== null ? `${toFa(scorecard.coverage)}٪` : '—'}
+            </div>
+            {scorecard.coverage !== null && scorecard.coverage < 100 && (
+              <div className="mt-1 max-w-36 text-[10px] leading-relaxed text-amber-200 text-center">
+                امتیاز بر اساس داده‌های موجود محاسبه شده است.
+              </div>
+            )}
           </div>
         </div>
       </div>
 
       {/* Perspective KPI Strips (4 Perspectives Quick Stats) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {scorecard.perspectives.map(({ perspective: p, score, status, objectives }) => {
+        {scorecard.perspectives.map(({ perspective: p, score, status, objectives, coverage }) => {
           const totalIndicators = objectives.reduce(
             (acc, o) => acc + o.indicators.length,
             0
@@ -344,6 +352,8 @@ export const ScorecardView: React.FC<ScorecardViewProps> = ({
                 <span>{toFa(objectives.length)} هدف استراتژیک</span>
                 <span aria-hidden="true" className="text-slate-300">·</span>
                 <span>{toFa(totalIndicators)} شاخص کلیدی</span>
+                <span aria-hidden="true" className="text-slate-300">·</span>
+                <span>پوشش {coverage !== null ? `${toFa(coverage)}٪` : '—'}</span>
               </div>
             </div>
           );
@@ -352,7 +362,7 @@ export const ScorecardView: React.FC<ScorecardViewProps> = ({
 
       {/* 4 Perspectives Detailed Tables */}
       <div className="space-y-6">
-        {scorecard.perspectives.map(({ perspective: p, objectives, score, status }) => {
+        {scorecard.perspectives.map(({ perspective: p, objectives, score, status, coverage }) => {
           const vis = getPerspectiveVisuals(p.name);
           const VisIcon = vis.icon;
 
@@ -378,6 +388,9 @@ export const ScorecardView: React.FC<ScorecardViewProps> = ({
                 </div>
 
                 <div className="flex items-center gap-3">
+                  <div className="text-[10px] text-slate-500 whitespace-nowrap">
+                    پوشش داده: {coverage !== null ? `${toFa(coverage)}٪` : '—'}
+                  </div>
                   <StatusBadge status={status} score={score} size="sm" />
                   <button
                     onClick={() => onOpenAddObjective(p.id)}
@@ -430,6 +443,9 @@ export const ScorecardView: React.FC<ScorecardViewProps> = ({
                             score={obj.score}
                             size="sm"
                           />
+                          <span className="text-[10px] text-slate-500 whitespace-nowrap">
+                            پوشش {obj.coverage !== null ? `${toFa(obj.coverage)}٪` : '—'}
+                          </span>
                         </div>
 
                         <button
