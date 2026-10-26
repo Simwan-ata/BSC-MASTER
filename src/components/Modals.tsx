@@ -83,6 +83,7 @@ export const AddObjectiveModal: React.FC<{
   const [perspId, setPerspId] = useState(defaultPerspectiveId || perspectives[0]?.id || 1);
   const [title, setTitle] = useState('');
   const [weight, setWeight] = useState('1.0');
+  const [validationError, setValidationError] = useState('');
   const [description, setDescription] = useState('');
 
   React.useEffect(() => {
@@ -93,11 +94,17 @@ export const AddObjectiveModal: React.FC<{
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
+    const parsedWeight = Number(weight);
+    if (!Number.isFinite(parsedWeight) || parsedWeight <= 0) {
+      setValidationError('وزن هدف باید عددی بزرگ‌تر از صفر باشد.');
+      return;
+    }
+    setValidationError('');
     onAdd({
       org_id: Number(orgId),
       perspective_id: Number(perspId),
       title: title.trim(),
-      weight: parseFloat(weight) || 1.0,
+      weight: parsedWeight,
       description: description.trim() || undefined,
     });
     setTitle('');
@@ -162,6 +169,7 @@ export const AddObjectiveModal: React.FC<{
           </label>
           <input
             type="number"
+            required
             step="0.1"
             min="0.1"
             value={weight}
@@ -183,6 +191,8 @@ export const AddObjectiveModal: React.FC<{
           />
         </div>
 
+        {validationError && <p role="alert" className="text-rose-600 text-xs">{validationError}</p>}
+        {validationError && <p role="alert" className="text-rose-600 text-xs">{validationError}</p>}
         <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100">
           <button
             type="button"
@@ -227,6 +237,7 @@ export const AddIndicatorModal: React.FC<{
   const [title, setTitle] = useState('');
   const [unit, setUnit] = useState('%');
   const [weight, setWeight] = useState('1.0');
+  const [validationError, setValidationError] = useState('');
   const [higherIsBetter, setHigherIsBetter] = useState(true);
   const [method, setMethod] = useState<MethodType>('achievement');
   const [cap, setCap] = useState('1.2');
@@ -240,17 +251,40 @@ export const AddIndicatorModal: React.FC<{
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
-
+    const parsedWeight = Number(weight);
+    const parsedCap = Number(cap);
+    const parsedYellow = Number(yellowLimit);
+    const parsedGreen = Number(greenLimit);
+    if (!Number.isFinite(parsedWeight) || parsedWeight <= 0) {
+      setValidationError('وزن شاخص باید عددی بزرگ‌تر از صفر باشد.');
+      return;
+    }
+    if (method === 'achievement' && (!Number.isFinite(parsedCap) || parsedCap < 1 || parsedCap > 2)) {
+      setValidationError('سقف تحقق باید بین ۱ و ۲ باشد.');
+      return;
+    }
+    if (method === 'threshold') {
+      if (yellowLimit.trim() === '' || greenLimit.trim() === '' ||
+          !Number.isFinite(parsedYellow) || !Number.isFinite(parsedGreen)) {
+        setValidationError('هر دو آستانه زرد و سبز باید عدد معتبر باشند.');
+        return;
+      }
+      if (higherIsBetter ? parsedGreen < parsedYellow : parsedGreen > parsedYellow) {
+        setValidationError('آستانه سبز باید از آستانه زرد سخت‌گیرانه‌تر باشد.');
+        return;
+      }
+    }
+    setValidationError('');
     onAdd({
       objective_id: Number(objectiveId),
       title: title.trim(),
       unit: unit.trim(),
-      weight: parseFloat(weight) || 1.0,
+      weight: parsedWeight,
       higher_is_better: higherIsBetter,
       method,
-      cap: parseFloat(cap) || 1.2,
-      yellow_limit: method === 'threshold' && yellowLimit !== '' ? parseFloat(yellowLimit) : null,
-      green_limit: method === 'threshold' && greenLimit !== '' ? parseFloat(greenLimit) : null,
+      cap: Number.isFinite(parsedCap) && parsedCap > 0 ? parsedCap : 1.2,
+      yellow_limit: method === 'threshold' ? parsedYellow : null,
+      green_limit: method === 'threshold' ? parsedGreen : null,
     });
 
     setTitle('');
@@ -306,6 +340,7 @@ export const AddIndicatorModal: React.FC<{
             <label className="block font-semibold text-slate-700 mb-1">وزن شاخص</label>
             <input
               type="number"
+              required
               step="0.1"
               min="0.1"
               value={weight}
@@ -380,6 +415,7 @@ export const AddIndicatorModal: React.FC<{
             </label>
             <input
               type="number"
+              required
               step="0.05"
               min="1.0"
               max="2.0"
