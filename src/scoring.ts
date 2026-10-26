@@ -65,6 +65,18 @@ export function wavg(pairs: [number | null, number][]): number | null {
   return Math.round((weightedSum / totalWeight) * 10) / 10;
 }
 
+/** Percentage of configured positive weight backed by a valid score. */
+function coverageOf(pairs: [number | null, number][]): number | null {
+  const configured = pairs.filter(([, weight]) => Number.isFinite(weight) && weight > 0);
+  const totalWeight = configured.reduce((sum, [, weight]) => sum + weight, 0);
+  if (!Number.isFinite(totalWeight) || totalWeight <= 0) return null;
+  const scoredWeight = configured.reduce(
+    (sum, [score, weight]) => sum + (score !== null && Number.isFinite(score) ? weight : 0),
+    0,
+  );
+  return Math.round((scoredWeight / totalWeight) * 1000) / 10;
+}
+
 export function calculateObjectiveOwnScore(objectiveId: number, db: DatabaseState, periodId: number): number | null {
   const indicators = db.indicators.filter((indicator) => indicator.objective_id === objectiveId);
   const pairs: [number | null, number][] = indicators.map((indicator) => {
@@ -91,7 +103,9 @@ export function buildScorecard(db: DatabaseState, orgId: number, periodId: numbe
         const [score, status] = scoreIndicator(indicator, target, actual);
         return { ...indicator, target, actual, score, status };
       });
-      const ownScore = wavg(scoredIndicators.map((indicator) => [indicator.score, indicator.weight]));
+      const indicatorPairs = scoredIndicators.map((indicator) => [indicator.score, indicator.weight] as [number | null, number]);
+      const ownScore = wavg(indicatorPairs);
+      const objectiveCoverage = coverageOf(indicatorPairs);
       const cascadeLinks = db.cascades.filter((link) => link.parent_id === objective.id);
       const children = cascadeLinks.map((link) => {
         const childObjective = db.objectives.find((item) => item.id === link.child_id);
@@ -108,14 +122,30 @@ export function buildScorecard(db: DatabaseState, orgId: number, periodId: numbe
       const alignedScore = children.length > 0 ? wavg(children.map((child) => [child.score, child.weight])) : null;
       return {
         ...objective, indicators: scoredIndicators, score: ownScore, status: statusOf(ownScore),
+        coverage: objectiveCoverage,
         children, aligned_score: alignedScore, aligned_status: statusOf(alignedScore),
       };
     });
-    const perspectiveScore = wavg(scoredObjectives.map((objective) => [objective.score, objective.weight]));
-    return { perspective, objectives: scoredObjectives, score: perspectiveScore, status: statusOf(perspectiveScore) };
+    const objectivePairs = scoredObjectives.map((objective) => [objective.score, objective.weight] as [number | null, number]);
+    const perspectiveScore = wavg(objectivePairs);
+    return {
+      perspective,
+      objectives: scoredObjectives,
+      score: perspectiveScore,
+      status: statusOf(perspectiveScore),
+      coverage: coverageOf(objectivePairs),
+    };
   });
 
   // Perspective weights are intentionally equal until the data model supports explicit weights.
-  const totalScore = wavg(perspectivesResult.map((perspective) => [perspective.score, 1]));
-  return { org_id: orgId, period_id: periodId, perspectives: perspectivesResult, score: totalScore, status: statusOf(totalScore) };
+  const perspectivePairs = perspectivesResult.map((perspective) => [perspective.score, 1] as [number | null, number]);
+  const totalScore = wavg(perspectivePairs);
+  return {
+    org_id: orgId,
+    period_id: periodId,
+    perspectives: perspectivesResult,
+    score: totalScore,
+    status: statusOf(totalScore),
+    coverage: coverageOf(perspectivePairs),
+  };
 }
