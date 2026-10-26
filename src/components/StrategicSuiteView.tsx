@@ -155,6 +155,10 @@ export const StrategicSuiteView: React.FC<StrategicSuiteViewProps> = ({
     onUpdateDb({
       ...db,
       swotItems: (db.swotItems || []).filter((item) => item.id !== id),
+      swotStrategies: (db.swotStrategies || []).map((strategy) => ({
+        ...strategy,
+        related_swot_ids: (strategy.related_swot_ids || []).filter((swotId) => swotId !== id),
+      })),
     });
     showToast('عامل SWOT حذف شد.');
   };
