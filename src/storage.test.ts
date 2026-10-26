@@ -56,6 +56,50 @@ test('legacy backups gain empty newer modules without seeded demo records', () =
 
 
 
+test('strategy-analysis links cannot cross organization boundaries', () => {
+  const crossOrgObjective = structuredClone(INITIAL_DATABASE);
+  crossOrgObjective.swotItems = [{
+    id: 990001,
+    org_id: 2,
+    type: 'strength',
+    title: 'Cross-org link should be rejected',
+    importance: 'high',
+    linked_objective_id: 1, // Objective 1 belongs to organization 1.
+  }];
+  assert.equal(validateDatabasePayload(crossOrgObjective), false);
+
+  const sameOrgObjective = structuredClone(INITIAL_DATABASE);
+  sameOrgObjective.swotItems = [{
+    id: 990002,
+    org_id: 2,
+    type: 'strength',
+    title: 'Valid organization-local link',
+    importance: 'high',
+    linked_objective_id: 10, // Objective 10 belongs to organization 2.
+  }];
+  assert.equal(validateDatabasePayload(sameOrgObjective), true);
+});
+
+test('SWOT strategies cannot reference SWOT items owned by another organization', () => {
+  const db = structuredClone(INITIAL_DATABASE);
+  db.swotItems = [{
+    id: 990011,
+    org_id: 1,
+    type: 'opportunity',
+    title: 'Holding opportunity',
+    importance: 'high',
+  }];
+  db.swotStrategies = [{
+    id: 990012,
+    org_id: 2,
+    type: 'SO',
+    title: 'Invalid cross-org strategy',
+    description: 'Must not combine SWOT records from different organizations.',
+    related_swot_ids: [990011],
+  }];
+  assert.equal(validateDatabasePayload(db), false);
+});
+
 test('EVM history validates periods, numeric domains, and one snapshot per initiative-period', () => {
   const valid = structuredClone(INITIAL_DATABASE);
   const initiative = valid.initiatives[0];
