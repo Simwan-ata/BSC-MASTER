@@ -118,8 +118,7 @@ export default function App() {
     if (existingIdx >= 0) {
       updatedMeasurements[existingIdx] = {
         ...updatedMeasurements[existingIdx],
-        target:
-          target !== null ? target : updatedMeasurements[existingIdx].target,
+        target,
         actual,
       };
     } else {
