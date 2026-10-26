@@ -43,6 +43,7 @@ import {
   InitiativeStatus,
   StrategicInitiative,
   InitiativeMilestone,
+  EvmPeriodSnapshot,
 } from '../types';
 import { toFa } from '../scoring';
 
@@ -84,8 +85,12 @@ export const InitiativePortfolioView: React.FC<InitiativePortfolioViewProps> = (
   const [searchTerm, setSearchTerm] = useState('');
 
   // What-If Simulation State for S-Curve
-  const [simExtraBudget, setSimExtraBudget] = useState<number>(20); // میلیارد ریال
-  const [simAccelerationTargetId, setSimAccelerationTargetId] = useState<number>(2); // Default to delayed project #2
+  const [evmTargetId, setEvmTargetId] = useState<number>(0);
+  const [evmPeriodKey, setEvmPeriodKey] = useState<string>('1405-07');
+  const [evmPlannedProgress, setEvmPlannedProgress] = useState<number>(50);
+  const [evmActualProgress, setEvmActualProgress] = useState<number>(45);
+  const [evmActualCost, setEvmActualCost] = useState<number>(20);
+  const [simExtraBudget, setSimExtraBudget] = useState<number>(20); // additional funding scenario only
 
   // Quick edit or modal state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -228,25 +233,95 @@ export const InitiativePortfolioView: React.FC<InitiativePortfolioViewProps> = (
     };
   }, [initiatives]);
 
-  // S-Curve Cumulative Data
-  const scurveData = useMemo(() => {
-    // Generate S-curve points over 12 months based on portfolio progress & simulation
-    const points = [
-      { month: 'دی ۰۴', planned: 5, actual: 5, cost: 4, sim: 5 },
-      { month: 'بهمن ۰۴', planned: 12, actual: 12, cost: 10, sim: 12 },
-      { month: 'اسفند ۰۴', planned: 24, actual: 22, cost: 19, sim: 22 },
-      { month: 'فروردین ۰۵', planned: 38, actual: 34, cost: 30, sim: 35 },
-      { month: 'اردیبهشت ۰۵', planned: 52, actual: 48, cost: 44, sim: 50 },
-      { month: 'خرداد ۰۵', planned: 65, actual: 60, cost: 56, sim: 64 },
-      { month: 'تیر ۰۵', planned: 78, actual: 72, cost: 68, sim: (72 + simExtraBudget * 0.25) },
-      { month: 'مرداد ۰۵', planned: 87, actual: null, cost: null, sim: (80 + simExtraBudget * 0.3) },
-      { month: 'شهریور ۰۵', planned: 93, actual: null, cost: null, sim: (89 + simExtraBudget * 0.35) },
-      { month: 'مهر ۰۵', planned: 97, actual: null, cost: null, sim: 96 },
-      { month: 'آبان ۰۵', planned: 99, actual: null, cost: null, sim: 99 },
-      { month: 'آذر ۰۵', planned: 100, actual: null, cost: null, sim: 100 },
-    ];
-    return points;
-  }, [simExtraBudget]);
+  // Real time-phased EVM data: aggregate cumulative observations by reporting period.
+  const evmHistory = useMemo(() => {
+    const byPeriod = new Map<string, { month: string; planned: number; earned: number; cost: number; sim?: number }>();
+    initiatives.forEach((initiative) => {
+      const bac = initiative.budget_allocated ?? 0;
+      (initiative.evm_periods ?? []).forEach((snapshot) => {
+        const point = byPeriod.get(snapshot.period_key) ?? {
+          month: snapshot.period_key,
+          planned: 0,
+          earned: 0,
+          cost: 0,
+        };
+        point.planned += bac * snapshot.planned_progress / 100;
+        point.earned += bac * snapshot.actual_progress / 100;
+        point.cost += snapshot.actual_cost;
+        byPeriod.set(snapshot.period_key, point);
+      });
+    });
+    return [...byPeriod.values()].sort((a, b) => a.month.localeCompare(b.month));
+  }, [initiatives]);
+
+  const latestEvm = useMemo(() => {
+    const latestByInitiative = initiatives.map((initiative) => {
+      const snapshots = [...(initiative.evm_periods ?? [])].sort((a, b) => a.period_key.localeCompare(b.period_key));
+      const snapshot = snapshots[snapshots.length - 1];
+      const bac = initiative.budget_allocated ?? 0;
+      return snapshot ? {
+        bac,
+        pv: bac * snapshot.planned_progress / 100,
+        ev: bac * snapshot.actual_progress / 100,
+        ac: snapshot.actual_cost,
+      } : null;
+    }).filter((value): value is { bac: number; pv: number; ev: number; ac: number } => value !== null);
+    const totals = latestByInitiative.reduce((sum, row) => ({
+      bac: sum.bac + row.bac,
+      pv: sum.pv + row.pv,
+      ev: sum.ev + row.ev,
+      ac: sum.ac + row.ac,
+    }), { bac: 0, pv: 0, ev: 0, ac: 0 });
+    return {
+      ...totals,
+      projectsWithHistory: latestByInitiative.length,
+      spi: totals.pv > 0 ? totals.ev / totals.pv : null,
+      cpi: totals.ac > 0 ? totals.ev / totals.ac : null,
+      eac: totals.ev > 0 && totals.cpi !== null ? totals.bac / totals.cpi : null,
+    };
+  }, [initiatives]);
+
+  useEffect(() => {
+    if (!initiatives.some((initiative) => initiative.id === evmTargetId)) {
+      setEvmTargetId(initiatives[0]?.id ?? 0);
+    }
+  }, [initiatives, evmTargetId]);
+
+  const handleAddEvmSnapshot = () => {
+    const target = initiatives.find((initiative) => initiative.id === evmTargetId);
+    if (!target) {
+      showToast('ابتدا یک پروژه در سازمان جاری انتخاب کنید.', 'error');
+      return;
+    }
+    if (!/^\\d{4}-(0[1-9]|1[0-2])$/.test(evmPeriodKey)) {
+      showToast('دوره را با قالب YYYY-MM وارد کنید.', 'error');
+      return;
+    }
+    if (![evmPlannedProgress, evmActualProgress, evmActualCost].every(Number.isFinite) ||
+        evmPlannedProgress < 0 || evmPlannedProgress > 100 ||
+        evmActualProgress < 0 || evmActualProgress > 100 || evmActualCost < 0) {
+      showToast('درصدهای برنامه‌ای/واقعی باید بین ۰ تا ۱۰۰ و هزینه واقعی نامنفی باشد.', 'error');
+      return;
+    }
+    const nextSnapshot: EvmPeriodSnapshot = {
+      period_key: evmPeriodKey,
+      planned_progress: evmPlannedProgress,
+      actual_progress: evmActualProgress,
+      actual_cost: evmActualCost,
+      recorded_at: new Date().toISOString(),
+    };
+    const updated = (db.initiatives ?? []).map((initiative) => {
+      if (initiative.id !== target.id) return initiative;
+      const history = [...(initiative.evm_periods ?? [])];
+      const index = history.findIndex((snapshot) => snapshot.period_key === evmPeriodKey);
+      if (index >= 0) history[index] = nextSnapshot;
+      else history.push(nextSnapshot);
+      history.sort((a, b) => a.period_key.localeCompare(b.period_key));
+      return { ...initiative, evm_periods: history };
+    });
+    onUpdateDb({ ...db, initiatives: updated });
+    showToast('داده دوره‌ای EVM ثبت شد.', 'success');
+  };
 
   // Handlers for instant interactive updates
   const handleUpdateProgress = (initId: number, newProg: number) => {
@@ -876,202 +951,97 @@ export const InitiativePortfolioView: React.FC<InitiativePortfolioViewProps> = (
         </div>
       )}
 
-      {/* 4. VIEW 2: S-CURVE & EARNED VALUE MANAGEMENT (EVM) TOOL */}
+      {/* 4. VIEW 2: DATA-BACKED EARNED VALUE MANAGEMENT */}
       {viewMode === 'scurve' && (
         <div className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* S-Curve Chart (8 cols) */}
-            <div className="lg:col-span-8 p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg flex flex-col justify-between">
+          <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg space-y-4">
+            <div className="flex items-center justify-between gap-3 border-b border-slate-800 pb-3">
               <div>
-                <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-                  <div className="flex items-center gap-2">
-                    <TrendingUp className="w-4 h-4 text-teal-400" />
-                    <h3 className="text-sm font-bold text-white">
-                      نمونه نمایشی منحنی S (غیرمتصل به تاریخچه واقعی PV/EV/AC)
-                    </h3>
-                  </div>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/20 font-medium">
-                    داده نمونه
-                  </span>
+                <h3 className="text-sm font-bold text-white">ثبت تاریخچه واقعی EVM</h3>
+                <p className="text-[11px] text-slate-400 mt-1">برای هر پروژه و هر دوره، درصد برنامه‌ای، درصد تحقق واقعی و هزینه تجمعی تا پایان دوره را ثبت کنید. PV و EV از BAC محاسبه می‌شوند.</p>
+              </div>
+              <span className="text-[10px] px-2 py-1 rounded-lg bg-teal-500/10 text-teal-300 border border-teal-500/20">داده واقعی ثبت‌شده</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+              <label className="text-xs text-slate-300 lg:col-span-2">پروژه
+                <select value={evmTargetId} onChange={(e) => setEvmTargetId(Number(e.target.value))} className="mt-1 w-full p-2 rounded-lg bg-slate-950 border border-slate-700 text-white">
+                  {initiatives.map((initiative) => <option key={initiative.id} value={initiative.id}>{initiative.title}</option>)}
+                </select>
+              </label>
+              <label className="text-xs text-slate-300">دوره (YYYY-MM)
+                <input value={evmPeriodKey} onChange={(e) => setEvmPeriodKey(e.target.value)} placeholder="1405-07" className="mt-1 w-full p-2 rounded-lg bg-slate-950 border border-slate-700 text-white" />
+              </label>
+              <label className="text-xs text-slate-300">پیشرفت برنامه‌ای (%)
+                <input type="number" min="0" max="100" value={evmPlannedProgress} onChange={(e) => setEvmPlannedProgress(Number(e.target.value))} className="mt-1 w-full p-2 rounded-lg bg-slate-950 border border-slate-700 text-white" />
+              </label>
+              <label className="text-xs text-slate-300">پیشرفت واقعی (%)
+                <input type="number" min="0" max="100" value={evmActualProgress} onChange={(e) => setEvmActualProgress(Number(e.target.value))} className="mt-1 w-full p-2 rounded-lg bg-slate-950 border border-slate-700 text-white" />
+              </label>
+              <label className="text-xs text-slate-300">هزینه تجمعی (م.ر)
+                <input type="number" min="0" step="0.1" value={evmActualCost} onChange={(e) => setEvmActualCost(Number(e.target.value))} className="mt-1 w-full p-2 rounded-lg bg-slate-950 border border-slate-700 text-white" />
+              </label>
+            </div>
+            <button disabled={!initiatives.length} onClick={handleAddEvmSnapshot} className="px-4 py-2 rounded-lg bg-teal-600 hover:bg-teal-500 disabled:opacity-40 text-white text-xs font-semibold">ثبت / به‌روزرسانی دوره</button>
+          </div>
+
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+            {[
+              { label: 'BAC بودجه مصوب', value: latestEvm.bac, suffix: 'م.ر' },
+              { label: 'PV ارزش برنامه‌ای', value: latestEvm.pv, suffix: 'م.ر' },
+              { label: 'EV ارزش کسب‌شده', value: latestEvm.ev, suffix: 'م.ر' },
+              { label: 'AC هزینه واقعی', value: latestEvm.ac, suffix: 'م.ر' },
+              { label: 'EAC برآورد هزینه نهایی', value: latestEvm.eac, suffix: 'م.ر' },
+            ].map((metric) => (
+              <div key={metric.label} className="p-3 rounded-xl bg-slate-950 border border-slate-800">
+                <p className="text-[10px] text-slate-400">{metric.label}</p>
+                <p className="mt-1 text-lg font-bold text-white">{metric.value === null ? '—' : toFa(Math.round(metric.value * 100) / 100)} <span className="text-[10px] text-slate-400">{metric.suffix}</span></p>
+              </div>
+            ))}
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <div className="lg:col-span-8 p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg">
+              <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-800">
+                <h3 className="text-sm font-bold text-white">منحنی تجمعی PV / EV / AC</h3>
+                <span className="text-[10px] text-slate-400">{toFa(latestEvm.projectsWithHistory)} پروژه دارای تاریخچه</span>
+              </div>
+              {evmHistory.length === 0 ? (
+                <div className="py-16 text-center text-sm text-slate-400">هنوز تاریخچه EVM ثبت نشده است. برای جلوگیری از نمایش اعداد ساختگی، نمودار پس از ثبت اولین دوره رسم می‌شود.</div>
+              ) : (
+                <div className="h-72 mt-4">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={evmHistory} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.6} />
+                      <XAxis dataKey="month" stroke="#94a3b8" tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                      <YAxis stroke="#94a3b8" tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                      <Tooltip formatter={(value) => value == null ? '—' : toFa(Number(value), 2) + ' م.ر'} />
+                      <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
+                      <Line type="monotone" name="PV ارزش برنامه‌ای" dataKey="planned" stroke="#64748b" strokeWidth={2} dot={{ r: 3 }} />
+                      <Area type="monotone" name="EV ارزش کسب‌شده" dataKey="earned" stroke="#14b8a6" strokeWidth={3} fill="#14b8a6" fillOpacity={0.15} />
+                      <Line type="monotone" name="AC هزینه واقعی" dataKey="cost" stroke="#f59e0b" strokeWidth={2} dot={{ r: 2 }} />
+                    </ComposedChart>
+                  </ResponsiveContainer>
                 </div>
-                <p className="text-[11px] text-slate-400 mt-2">
-                  مقادیر این نمودار نمایشی و ثابت‌اند؛ تا زمان ثبت تاریخچه پیشرفت و هزینه به تفکیک دوره، نباید برای ارزیابی واقعی یا تصمیم‌گیری مدیریتی استفاده شوند.
-                </p>
-              </div>
-
-              <div className="h-72 my-4">
-                <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={scurveData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.6} />
-                    <XAxis
-                      dataKey="month"
-                      stroke="#94a3b8"
-                      tick={{ fill: '#94a3b8', fontSize: 10, fontFamily: 'Vazirmatn' }}
-                    />
-                    <YAxis
-                      stroke="#94a3b8"
-                      domain={[0, 100]}
-                      tick={{ fill: '#94a3b8', fontSize: 10 }}
-                      unit="٪"
-                    />
-                    <Tooltip
-                      content={({ active, payload, label }) => {
-                        if (active && payload && payload.length) {
-                          return (
-                            <div className="bg-slate-950 p-3 border border-slate-700 rounded-xl shadow-xl text-xs text-right space-y-1.5 font-sans">
-                              <p className="font-bold text-white border-b border-slate-800 pb-1">{label}</p>
-                              {payload.map((entry, idx) => (
-                                <p key={idx} style={{ color: entry.color }} className="flex justify-between gap-4 font-mono">
-                                  <span>{entry.name}:</span>
-                                  <span className="font-bold">
-                                    {entry.value !== null && entry.value !== undefined
-                                      ? `${toFa(Number(entry.value))}٪`
-                                      : '—'}
-                                  </span>
-                                </p>
-                              ))}
-                            </div>
-                          );
-                        }
-                        return null;
-                      }}
-                    />
-                    <Legend
-                      wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }}
-                      formatter={(val) => <span className="text-slate-300 font-sans">{val}</span>}
-                    />
-                    {/* Planned Value (PV) */}
-                    <Line
-                      type="monotone"
-                      name="پیشرفت برنامه‌ای (PV)"
-                      dataKey="planned"
-                      stroke="#64748b"
-                      strokeWidth={2}
-                      strokeDasharray="5 5"
-                      dot={{ r: 3 }}
-                    />
-                    {/* Earned Value / Actual (EV) */}
-                    <Area
-                      type="monotone"
-                      name="ارزش کسب‌شده / واقعی (EV)"
-                      dataKey="actual"
-                      stroke="#14b8a6"
-                      strokeWidth={3}
-                      fill="#14b8a6"
-                      fillOpacity={0.15}
-                    />
-                    {/* Actual Cost Curve (AC) */}
-                    <Line
-                      type="monotone"
-                      name="هزینه مصرفی تجمعی (AC)"
-                      dataKey="cost"
-                      stroke="#f59e0b"
-                      strokeWidth={2}
-                      dot={{ r: 2 }}
-                    />
-                    {/* Simulation Curve */}
-                    <Line
-                      type="monotone"
-                      name="پیش‌بینی با مداخله شبیه‌سازی"
-                      dataKey="sim"
-                      stroke="#a855f7"
-                      strokeWidth={2}
-                      strokeDasharray="3 3"
-                    />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </div>
-
-              <div className="pt-3 border-t border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
-                <span>نمایش نمونه؛ تاریخچه واقعی پروژه در دسترس نیست</span>
-                <span className="text-teal-400 font-semibold">
-                  انحراف پیشرفت فعلی: {toFa(scurveData[6].planned - (scurveData[6].actual || 0))}٪ عقب‌ماندگی از برنامه
-                </span>
-              </div>
+              )}
+              <p className="pt-3 border-t border-slate-800 text-[11px] text-slate-400">واحد ارزش‌ها و هزینه‌ها: میلیارد ریال. برای مقایسه معتبر، درصدهای پیشرفت و AC باید برای یک دوره گزارش یکسان و به‌صورت تجمعی ثبت شوند.</p>
             </div>
 
-            {/* Strategic Intervention Simulator Tool (4 cols) */}
             <div className="lg:col-span-4 p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg space-y-4">
-              <div className="flex items-center gap-2 pb-3 border-b border-slate-800">
-                <Sliders className="w-4 h-4 text-purple-400" />
-                <h3 className="text-sm font-bold text-white">
-                  شبیه‌ساز مداخله و تزریق منابع استراتژیک (What-If)
-                </h3>
-              </div>
-
-              <p className="text-[11px] text-slate-400 leading-relaxed">
-                آزمون سناریوهای تسریع: اگر بودجه اضافی یا تیم تخصصی به پروژه‌های دارای گلوگاه تزریق شود، جبران تاخیر و بهبود SPI چگونه خواهد بود؟
-              </p>
-
-              {/* Target Project Selection */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  پروژه هدف جهت تزریق منابع تسریع:
-                </label>
-                <select
-                  value={simAccelerationTargetId}
-                  onChange={(e) => setSimAccelerationTargetId(Number(e.target.value))}
-                  className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-purple-500"
-                >
-                  {initiatives
-                    .filter((i) => i.status === 'behind' || i.status === 'at_risk')
-                    .map((i) => (
-                      <option key={i.id} value={i.id}>
-                        {i.title} (پیشرفت فعلی: {toFa(i.progress)}٪)
-                      </option>
-                    ))}
-                </select>
-              </div>
-
-              {/* Budget Injection Slider */}
-              <div className="space-y-1.5 p-3 rounded-xl bg-slate-950/60 border border-slate-800">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-slate-300">تزریق بودجه تسریع (میلیارد ریال):</span>
-                  <span className="font-bold text-purple-400 font-mono">
-                    +{toFa(simExtraBudget)} م.ر
-                  </span>
+              <h3 className="text-sm font-bold text-white border-b border-slate-800 pb-3">تحلیل عملکرد و سناریوی بودجه</h3>
+              {latestEvm.spi === null || latestEvm.cpi === null ? (
+                <p className="text-xs text-slate-400">برای محاسبه SPI و CPI باید PV و AC مثبت و تاریخچه دوره‌ای معتبر ثبت شده باشد.</p>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 rounded-xl bg-slate-950 border border-slate-800"><p className="text-[10px] text-slate-400">SPI = EV / PV</p><p className="text-xl font-bold text-white">{toFa(latestEvm.spi, 2)}</p></div>
+                  <div className="p-3 rounded-xl bg-slate-950 border border-slate-800"><p className="text-[10px] text-slate-400">CPI = EV / AC</p><p className="text-xl font-bold text-white">{toFa(latestEvm.cpi, 2)}</p></div>
                 </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="60"
-                  step="5"
-                  value={simExtraBudget}
-                  onChange={(e) => setSimExtraBudget(Number(e.target.value))}
-                  className="w-full accent-purple-500 cursor-pointer"
-                />
-                <div className="flex justify-between text-[10px] text-slate-500">
-                  <span>۰ م.ر</span>
-                  <span>۳۰ م.ر</span>
-                  <span>۶۰ م.ر</span>
-                </div>
-              </div>
-
-              {/* Simulation Output Cards */}
-              <div className="space-y-2 pt-2">
-                <div className="p-3 rounded-xl bg-purple-950/20 border border-purple-500/30 flex items-center justify-between text-xs">
-                  <span className="text-purple-300 font-medium">حساسیت فرضی SPI (نه پیش‌بینی):</span>
-                  <span className="font-bold text-white font-mono">
-                    {toFa(portfolioStats.spi)} ➔{' '}
-                    <span className="text-emerald-400">
-                      {toFa(Math.min(1.05, portfolioStats.spi + simExtraBudget * 0.005), 2)}
-                    </span>
-                  </span>
-                </div>
-
-                <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 flex items-center justify-between text-xs">
-                  <span className="text-slate-400">اثر فرضی تزریق بودجه:</span>
-                  <span className="font-bold text-emerald-400">
-                    +{toFa(Math.round(simExtraBudget * 0.4))}٪ جبران در افق ۳ ماهه
-                  </span>
-                </div>
-              </div>
-
-              <div className="p-3 rounded-xl bg-slate-950/40 border border-slate-800/80 text-[11px] text-slate-400 flex items-start gap-2">
-                <Sparkles className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
-                <p>
-                  خروجی‌ها از ضرایب ساده نمایشی استفاده می‌کنند و به پروژه انتخاب‌شده یا مدل علّی تأییدشده متصل نیستند؛ برای پیش‌بینی واقعی باید مدل هزینه–پیشرفت کالیبره و داده‌های دوره‌ای ثبت شوند.
-                </p>
+              )}
+              <label className="block text-xs text-slate-300">بودجه اضافی فرضی (میلیارد ریال)
+                <input type="number" min="0" step="1" value={simExtraBudget} onChange={(e) => setSimExtraBudget(Math.max(0, Number(e.target.value) || 0))} className="mt-1 w-full p-2 rounded-lg bg-slate-950 border border-slate-700 text-white" />
+              </label>
+              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs">
+                <p className="text-slate-400">بودجه در دسترس پس از تزریق</p>
+                <p className="mt-1 text-lg font-bold text-white">{toFa(latestEvm.bac + simExtraBudget, 2)} م.ر</p>
+                <p className="mt-2 text-[11px] text-slate-400">این سناریو صرفاً ظرفیت بودجه را تغییر می‌دهد؛ به‌طور خودکار SPI/CPI یا تاریخ پایان را بهتر فرض نمی‌کند. پیش‌بینی زمان و هزینه به مدل برنامه زمان‌بندی، منابع و داده‌های معتبر نیاز دارد.</p>
               </div>
             </div>
           </div>
