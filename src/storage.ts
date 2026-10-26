@@ -287,6 +287,31 @@ function validateDatabase(value: unknown): value is DatabaseState {
   if (db.pestelItems?.some((x) => x.linkedObjectiveId !== undefined && !objectiveIds.has(x.linkedObjectiveId))) return false;
   if (db.porterItems?.some((x) => x.linkedObjectiveId !== undefined && !objectiveIds.has(x.linkedObjectiveId))) return false;
   if (db.vrioItems?.some((x) => x.linkedObjectiveId !== undefined && !objectiveIds.has(x.linkedObjectiveId))) return false;
+
+  // Strategy-analysis records and their linked objectives must belong to the same
+  // organization. Existence-only checks allow cross-organization links that look
+  // valid structurally but contaminate local strategy and risk reporting.
+  const objectiveOrgById = new Map(db.objectives.map((objective) => [objective.id, objective.org_id]));
+  const sameOrgLinks = [
+    ['swotItems', 'linked_objective_id'],
+    ['swotStrategies', 'linked_objective_id'],
+    ['risks', 'linked_objective_id'],
+    ['pestelItems', 'linkedObjectiveId'],
+    ['porterItems', 'linkedObjectiveId'],
+    ['vrioItems', 'linkedObjectiveId'],
+  ] as const;
+  for (const [collection, linkField] of sameOrgLinks) {
+    const items = (db as any)[collection] as unknown[];
+    if (items.some((raw) => {
+      if (!isRecord(raw) || raw[linkField] === undefined) return false;
+      return objectiveOrgById.get(raw[linkField]) !== raw.org_id;
+    })) return false;
+  }
+  const swotOrgById = new Map((db.swotItems ?? []).map((item) => [item.id, item.org_id]));
+  if (db.swotStrategies?.some((strategy) =>
+    strategy.related_swot_ids.some((id) => swotOrgById.get(id) !== strategy.org_id)
+  )) return false;
+
   return true;
 }
 
