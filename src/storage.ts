@@ -72,7 +72,7 @@ function validateDatabase(value: unknown): value is DatabaseState {
         (x.green_limit !== null && x.green_limit !== undefined && !finite(x.green_limit))) return false;
     if (x.method === 'threshold') {
       if (!finite(x.yellow_limit) || !finite(x.green_limit)) return false;
-      if (x.higher_is_better ? x.green_limit < x.yellow_limit : x.green_limit > x.yellow_limit) return false;
+      if (x.higher_is_better ? x.green_limit <= x.yellow_limit : x.green_limit >= x.yellow_limit) return false;
     }
     return true;
   })) return false;
