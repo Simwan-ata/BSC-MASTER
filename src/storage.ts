@@ -140,7 +140,99 @@ function validateDatabase(value: unknown): value is DatabaseState {
   if (db.causes.some((x) => !isRecord(x) || !objectiveIds.has(x.from_id) || !objectiveIds.has(x.to_id) || x.from_id === x.to_id)) return false;
   if (db.initiatives.some((x) => !isRecord(x) || !objectiveIds.has(x.objective_id) || typeof x.title !== 'string')) return false;
   if (db.focusAreas.some((x) => !isRecord(x) || !orgIds.has(x.org_id) || typeof x.title !== 'string')) return false;
-  if (db.visions.some((x) => !isRecord(x) || !orgIds.has(x.org_id) || typeof x.vision !== 'string')) return false;
+  if (db.initiatives.some((x) =>
+    !isRecord(x) || !objectiveIds.has(x.objective_id) || typeof x.title !== 'string' ||
+    typeof x.owner !== 'string' || typeof x.due_date !== 'string' ||
+    !finite(x.progress) || x.progress < 0 || x.progress > 100 ||
+    !['on_track', 'behind', 'at_risk', 'completed'].includes(x.status) ||
+    (x.planned_progress !== undefined && (!finite(x.planned_progress) || x.planned_progress < 0 || x.planned_progress > 100)) ||
+    (x.budget_allocated !== undefined && (!finite(x.budget_allocated) || x.budget_allocated < 0)) ||
+    (x.budget_spent !== undefined && (!finite(x.budget_spent) || x.budget_spent < 0)) ||
+    (x.milestones !== undefined && (!Array.isArray(x.milestones) || x.milestones.some((m: unknown) =>
+      !isRecord(m) || !finite(m.id) || typeof m.title !== 'string' ||
+      typeof m.due_date !== 'string' || typeof m.completed !== 'boolean'
+    )))
+  )) return false;
+  if (db.focusAreas.some((x) => !isRecord(x) || !orgIds.has(x.org_id) || typeof x.title !== 'string' || typeof x.color !== 'string')) return false;
+  if (db.visions.some((x) =>
+    !isRecord(x) || !orgIds.has(x.org_id) || typeof x.vision !== 'string' ||
+    typeof x.mission !== 'string' || !Array.isArray(x.core_values) ||
+    x.core_values.some((value: unknown) => typeof value !== 'string')
+  )) return false;
+
+  if (db.swotItems?.some((x) =>
+    typeof x.title !== 'string' ||
+    !['strength', 'weakness', 'opportunity', 'threat'].includes(x.type) ||
+    !['high', 'medium', 'low'].includes(x.importance) ||
+    (x.score !== undefined && (!finite(x.score) || x.score < 1 || x.score > 10))
+  )) return false;
+  if (db.swotStrategies?.some((x) =>
+    typeof x.title !== 'string' || typeof x.description !== 'string' ||
+    !['SO', 'WO', 'ST', 'WT'].includes(x.type)
+  )) return false;
+  if (db.bcgItems?.some((x) =>
+    typeof x.name !== 'string' || !finite(x.market_growth_rate) ||
+    !finite(x.relative_market_share) || !finite(x.revenue) ||
+    typeof x.revenue_currency !== 'string' ||
+    !['star', 'cash_cow', 'question_mark', 'dog'].includes(x.quadrant) ||
+    typeof x.recommendation !== 'string'
+  )) return false;
+  if (db.megaTrends?.some((x) =>
+    typeof x.title !== 'string' || typeof x.timeframe !== 'string' ||
+    !['technology', 'economy', 'geopolitics', 'environment', 'society'].includes(x.category) ||
+    !['critical', 'high', 'medium'].includes(x.impact_level)
+  )) return false;
+  if (db.weakSignals?.some((x) =>
+    typeof x.title !== 'string' || typeof x.source !== 'string' ||
+    !['emerging', 'accelerating', 'maturing'].includes(x.maturity)
+  )) return false;
+  if (db.wildCards?.some((x) =>
+    typeof x.title !== 'string' || !['very_low', 'low'].includes(x.probability) ||
+    !['catastrophic', 'transformational'].includes(x.impact)
+  )) return false;
+  if (db.horizonInitiatives?.some((x) =>
+    typeof x.title !== 'string' || !['H1', 'H2', 'H3'].includes(x.horizon) ||
+    !finite(x.budget_share) || typeof x.timeline !== 'string'
+  )) return false;
+  if (db.uncertainties?.some((x) =>
+    !['X', 'Y'].includes(x.axis) || typeof x.title !== 'string' ||
+    typeof x.negative_pole !== 'string' || typeof x.positive_pole !== 'string'
+  )) return false;
+  if (db.scenarios?.some((x) =>
+    typeof x.title !== 'string' || !['S1', 'S2', 'S3', 'S4'].includes(x.code) ||
+    !finite(x.probability) || !Array.isArray(x.early_warnings) ||
+    !Array.isArray(x.contingency_actions)
+  )) return false;
+  if (db.risks?.some((x) =>
+    typeof x.code !== 'string' || typeof x.title !== 'string' ||
+    !finite(x.probability) || x.probability < 1 || x.probability > 5 ||
+    !finite(x.impact) || x.impact < 1 || x.impact > 5 ||
+    !finite(x.score) || typeof x.owner !== 'string' ||
+    !['active', 'mitigated', 'monitored', 'closed'].includes(x.status) ||
+    !['mitigate', 'avoid', 'transfer', 'accept'].includes(x.response_strategy)
+  )) return false;
+  if (db.pestelItems?.some((x) =>
+    typeof x.title !== 'string' ||
+    !['political', 'economic', 'social', 'technological', 'environmental', 'legal'].includes(x.dimension) ||
+    !['opportunity', 'threat', 'neutral'].includes(x.impactType) ||
+    !finite(x.impactScore) || !finite(x.probabilityScore)
+  )) return false;
+  if (db.porterItems?.some((x) =>
+    typeof x.title !== 'string' ||
+    !['rivalry', 'buyers', 'suppliers', 'new_entrants', 'substitutes'].includes(x.force) ||
+    !finite(x.intensity) || x.intensity < 1 || x.intensity > 5
+  )) return false;
+  if (db.vrioItems?.some((x) =>
+    typeof x.resource_name !== 'string' ||
+    typeof x.is_valuable !== 'boolean' || typeof x.is_rare !== 'boolean' ||
+    typeof x.is_inimitable !== 'boolean' || typeof x.is_organized !== 'boolean'
+  )) return false;
+  if (db.spaceFactors?.some((x) =>
+    !['FS', 'CA', 'IS', 'ES'].includes(x.dimension) || typeof x.name !== 'string' ||
+    !finite(x.score) ||
+    ((x.dimension === 'FS' || x.dimension === 'IS') && (x.score < 1 || x.score > 6)) ||
+    ((x.dimension === 'CA' || x.dimension === 'ES') && (x.score < -6 || x.score > -1))
+  )) return false;
 
   const orgScopedArrays = [
     'swotItems', 'swotStrategies', 'bcgItems', 'risks', 'pestelItems',
@@ -155,7 +247,6 @@ function validateDatabase(value: unknown): value is DatabaseState {
     (x.linked_objective_id !== undefined && !objectiveIds.has(x.linked_objective_id)) ||
     !Array.isArray(x.related_swot_ids) || x.related_swot_ids.some((id) => !swotIds.has(id))
   )) return false;
-  if (db.swotStrategies?.some((x) => x.linked_objective_id !== undefined && !objectiveIds.has(x.linked_objective_id))) return false;
   if (db.risks?.some((x) => x.linked_objective_id !== undefined && !objectiveIds.has(x.linked_objective_id))) return false;
   if (db.pestelItems?.some((x) => x.linkedObjectiveId !== undefined && !objectiveIds.has(x.linkedObjectiveId))) return false;
   if (db.porterItems?.some((x) => x.linkedObjectiveId !== undefined && !objectiveIds.has(x.linkedObjectiveId))) return false;
