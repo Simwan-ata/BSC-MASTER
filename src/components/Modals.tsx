@@ -268,7 +268,7 @@ export const AddIndicatorModal: React.FC<{
         setValidationError('هر دو آستانه زرد و سبز باید عدد معتبر باشند.');
         return;
       }
-      if (higherIsBetter ? parsedGreen < parsedYellow : parsedGreen > parsedYellow) {
+      if (higherIsBetter ? parsedGreen <= parsedYellow : parsedGreen >= parsedYellow) {
         setValidationError('آستانه سبز باید از آستانه زرد سخت‌گیرانه‌تر باشد.');
         return;
       }
