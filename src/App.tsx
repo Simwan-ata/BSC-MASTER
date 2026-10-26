@@ -17,6 +17,7 @@ import { AlignmentCascadeView } from './components/AlignmentCascadeView';
 import { CascadeView } from './components/CascadeView';
 import { AnalyticsView } from './components/AnalyticsView';
 import { StrategicSuiteView } from './components/StrategicSuiteView';
+import { StrategicTraceabilitySummary } from './components/StrategicTraceabilitySummary';
 import { InitiativePortfolioView } from './components/InitiativePortfolioView';
 import {
   AddObjectiveModal,
@@ -555,12 +556,15 @@ export default function App() {
               )}
 
               {activeTab === 'strategy_tools' && (
-                <StrategicSuiteView
+                <>
+                  <StrategicTraceabilitySummary db={db} selectedOrgId={selectedOrgId} />
+                  <StrategicSuiteView
                   db={db}
                   selectedOrgId={selectedOrgId}
                   onUpdateDb={updateDb}
                   showToast={showToast}
-                />
+                  />
+                </>
               )}
             </>
           ) : (
