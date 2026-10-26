@@ -7,6 +7,7 @@ import {
   exportDatabaseJson,
   importDatabaseJson,
   deleteObjectiveCascade,
+  restorePreviousDatabase,
 } from './storage';
 import { DatabaseState, Indicator, StrategicInitiative, StatusType } from './types';
 import { createStableId } from './ids';
@@ -401,6 +402,22 @@ export default function App() {
     );
   };
 
+  const handleRestorePrevious = () => {
+    const restored = restorePreviousDatabase();
+    if (!restored) {
+      showToast('نسخه قبلی قابل بازیابی نیست یا داده‌های آن معتبر نیستند.', 'error');
+      return;
+    }
+    setDb(restored);
+    setSelectedOrgId((current) => restored.orgs.some((org) => org.id === current)
+      ? current
+      : restored.orgs[1]?.id || restored.orgs[0]?.id || 1);
+    setSelectedPeriodId((current) => restored.periods.some((period) => period.id === current)
+      ? current
+      : restored.periods.find((period) => period.is_active)?.id || restored.periods[0]?.id || 1);
+    showToast('نسخه قبلی محلی بازیابی شد.');
+  };
+
   const handleReset = () => {
     const fresh = resetDatabase();
     if (!fresh) {
@@ -591,6 +608,7 @@ export default function App() {
         onExport={handleExport}
         onImport={handleImport}
         onReset={handleReset}
+        onRestorePrevious={handleRestorePrevious}
       />
 
       {/* Confirmation Dialog (in-app modal replacing window.confirm) */}
