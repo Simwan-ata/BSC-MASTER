@@ -168,8 +168,8 @@ export const InitiativePortfolioView: React.FC<InitiativePortfolioViewProps> = (
         avgPlanned: 0,
         totalAllocated: 0,
         totalSpent: 0,
-        spi: 1.0,
-        cpi: 1.0,
+        spi: null,
+        cpi: null,
         onTrack: 0,
         behind: 0,
         atRisk: 0,
@@ -213,10 +213,20 @@ export const InitiativePortfolioView: React.FC<InitiativePortfolioViewProps> = (
       0
     );
 
-    // Schedule Performance Index: EV / PV
-    const spi = plannedValueTotal > 0 ? Number((earnedValueTotal / plannedValueTotal).toFixed(2)) : 1.0;
-    // Cost Performance Index: EV / AC
-    const cpi = totalSpent > 0 ? Number((earnedValueTotal / totalSpent).toFixed(2)) : 1.0;
+    // EVM indices are calculated only from recorded time-phased snapshots; never infer 1.0 when history is missing.
+    const latestPeriod = initiatives.flatMap((initiative) => initiative.evm_periods ?? [])
+      .map((snapshot) => snapshot.period_key).sort().at(-1);
+    const evmRows = initiatives.flatMap((initiative) => {
+      const snapshot = (initiative.evm_periods ?? []).find((item) => item.period_key === latestPeriod);
+      if (!snapshot) return [];
+      const bac = initiative.budget_allocated ?? 0;
+      return [{ pv: bac * snapshot.planned_progress / 100, ev: bac * snapshot.actual_progress / 100, ac: snapshot.actual_cost }];
+    });
+    const evmPv = evmRows.reduce((sum, row) => sum + row.pv, 0);
+    const evmEv = evmRows.reduce((sum, row) => sum + row.ev, 0);
+    const evmAc = evmRows.reduce((sum, row) => sum + row.ac, 0);
+    const spi = evmPv > 0 ? Number((evmEv / evmPv).toFixed(2)) : null;
+    const cpi = evmAc > 0 ? Number((evmEv / evmAc).toFixed(2)) : null;
 
     return {
       total,
@@ -255,29 +265,26 @@ export const InitiativePortfolioView: React.FC<InitiativePortfolioViewProps> = (
   }, [initiatives]);
 
   const latestEvm = useMemo(() => {
-    const latestByInitiative = initiatives.map((initiative) => {
-      const snapshots = [...(initiative.evm_periods ?? [])].sort((a, b) => a.period_key.localeCompare(b.period_key));
-      const snapshot = snapshots[snapshots.length - 1];
+    const latestPeriod = initiatives.flatMap((initiative) => initiative.evm_periods ?? [])
+      .map((snapshot) => snapshot.period_key).sort().at(-1);
+    const latestByInitiative = initiatives.flatMap((initiative) => {
+      const snapshot = (initiative.evm_periods ?? []).find((item) => item.period_key === latestPeriod);
+      if (!snapshot) return [];
       const bac = initiative.budget_allocated ?? 0;
-      return snapshot ? {
-        bac,
-        pv: bac * snapshot.planned_progress / 100,
-        ev: bac * snapshot.actual_progress / 100,
-        ac: snapshot.actual_cost,
-      } : null;
-    }).filter((value): value is { bac: number; pv: number; ev: number; ac: number } => value !== null);
+      return [{ bac, pv: bac * snapshot.planned_progress / 100, ev: bac * snapshot.actual_progress / 100, ac: snapshot.actual_cost }];
+    });
     const totals = latestByInitiative.reduce((sum, row) => ({
-      bac: sum.bac + row.bac,
-      pv: sum.pv + row.pv,
-      ev: sum.ev + row.ev,
-      ac: sum.ac + row.ac,
+      bac: sum.bac + row.bac, pv: sum.pv + row.pv, ev: sum.ev + row.ev, ac: sum.ac + row.ac,
     }), { bac: 0, pv: 0, ev: 0, ac: 0 });
+    const cpi = totals.ac > 0 ? totals.ev / totals.ac : null;
     return {
       ...totals,
+      period: latestPeriod ?? null,
       projectsWithHistory: latestByInitiative.length,
+      projectsInScope: initiatives.length,
       spi: totals.pv > 0 ? totals.ev / totals.pv : null,
-      cpi: totals.ac > 0 ? totals.ev / totals.ac : null,
-      eac: totals.ev > 0 && totals.cpi !== null ? totals.bac / totals.cpi : null,
+      cpi,
+      eac: totals.ev > 0 && cpi !== null ? totals.bac / cpi : null,
     };
   }, [initiatives]);
 
@@ -568,23 +575,23 @@ export const InitiativePortfolioView: React.FC<InitiativePortfolioViewProps> = (
             <div className="flex items-baseline gap-2">
               <span
                 className={`text-2xl font-extrabold ${
-                  portfolioStats.spi >= 1.0
+                  (portfolioStats.spi !== null && portfolioStats.spi >= 1.0)
                     ? 'text-emerald-400'
-                    : portfolioStats.spi >= 0.85
+                    : (portfolioStats.spi !== null && portfolioStats.spi >= 0.85)
                     ? 'text-amber-400'
                     : 'text-red-400'
                 }`}
               >
-                {toFa(portfolioStats.spi, 2)}
+                {portfolioStats.spi === null ? '—' : toFa(portfolioStats.spi, 2)}
               </span>
               <span className="text-[10px] text-slate-400">
-                {portfolioStats.spi >= 1.0 ? 'جلوتر از برنامه' : 'دارای تأخیر زمانی'}
+                {portfolioStats.spi === null ? 'داده دوره‌ای ثبت نشده' : (portfolioStats.spi >= 1.0 ? 'جلوتر از برنامه' : 'دارای تأخیر زمانی')}
               </span>
             </div>
             <p className="text-[10px] text-slate-400 truncate">
-              {portfolioStats.spi >= 1.0
+              {(portfolioStats.spi !== null && portfolioStats.spi >= 1.0)
                 ? 'نرخ تحقق زمان‌بندی مطلوب'
-                : `انحراف زمانی: ${toFa(Math.round((1 - portfolioStats.spi) * 100))}٪ تاخیر`}
+                : `انحراف زمانی: ${portfolioStats.spi === null ? '—' : toFa(Math.round((1 - portfolioStats.spi) * 100))}٪ تاخیر`}
             </p>
           </div>
 
@@ -597,7 +604,7 @@ export const InitiativePortfolioView: React.FC<InitiativePortfolioViewProps> = (
             <div className="flex items-baseline gap-2">
               <span
                 className={`text-2xl font-extrabold ${
-                  portfolioStats.cpi >= 1.0
+                  (portfolioStats.cpi !== null && portfolioStats.cpi >= 1.0)
                     ? 'text-emerald-400'
                     : 'text-amber-400'
                 }`}
@@ -605,7 +612,7 @@ export const InitiativePortfolioView: React.FC<InitiativePortfolioViewProps> = (
                 {toFa(portfolioStats.cpi, 2)}
               </span>
               <span className="text-[10px] text-slate-400">
-                {portfolioStats.cpi >= 1.0 ? 'صرفه‌جویی بودجه' : 'انحراف بودجه'}
+                {portfolioStats.cpi === null ? 'داده دوره‌ای ثبت نشده' : (portfolioStats.cpi >= 1.0 ? 'صرفه‌جویی بودجه' : 'انحراف بودجه')}
               </span>
             </div>
             <p className="text-[10px] text-slate-400 truncate">
@@ -958,7 +965,7 @@ export const InitiativePortfolioView: React.FC<InitiativePortfolioViewProps> = (
             <div className="flex items-center justify-between gap-3 border-b border-slate-800 pb-3">
               <div>
                 <h3 className="text-sm font-bold text-white">ثبت تاریخچه واقعی EVM</h3>
-                <p className="text-[11px] text-slate-400 mt-1">برای هر پروژه و هر دوره، درصد برنامه‌ای، درصد تحقق واقعی و هزینه تجمعی تا پایان دوره را ثبت کنید. PV و EV از BAC محاسبه می‌شوند.</p>
+                <p className="text-[11px] text-slate-400 mt-1">برای هر پروژه و هر دوره، درصد برنامه‌ای، درصد تحقق واقعی و هزینه تجمعی تا پایان دوره را ثبت کنید. PV و EV از BAC محاسبه می‌شوند. هزینه واقعی باید تجمعی باشد.</p>
               </div>
               <span className="text-[10px] px-2 py-1 rounded-lg bg-teal-500/10 text-teal-300 border border-teal-500/20">داده واقعی ثبت‌شده</span>
             </div>
@@ -1002,7 +1009,7 @@ export const InitiativePortfolioView: React.FC<InitiativePortfolioViewProps> = (
             <div className="lg:col-span-8 p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg">
               <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-800">
                 <h3 className="text-sm font-bold text-white">منحنی تجمعی PV / EV / AC</h3>
-                <span className="text-[10px] text-slate-400">{toFa(latestEvm.projectsWithHistory)} پروژه دارای تاریخچه</span>
+                <span className="text-[10px] text-slate-400">دوره آخر: {latestEvm.period ?? '—'} · پوشش {toFa(latestEvm.projectsWithHistory)} از {toFa(latestEvm.projectsInScope)} پروژه</span>
               </div>
               {evmHistory.length === 0 ? (
                 <div className="py-16 text-center text-sm text-slate-400">هنوز تاریخچه EVM ثبت نشده است. برای جلوگیری از نمایش اعداد ساختگی، نمودار پس از ثبت اولین دوره رسم می‌شود.</div>
