@@ -44,6 +44,28 @@ function normalizeDatabase(value: unknown): unknown {
   for (const key of STRATEGY_ARRAYS) {
     if (!Array.isArray(normalized[key])) normalized[key] = [];
   }
+
+  // Repair stale optional links in older saved databases without deleting records.
+  const objectiveIds = new Set(normalized.objectives.map((objective: RecordValue) => objective.id));
+  const optionalObjectiveLinks = [
+    ['swotItems', 'linked_objective_id'],
+    ['swotStrategies', 'linked_objective_id'],
+    ['risks', 'linked_objective_id'],
+    ['pestelItems', 'linkedObjectiveId'],
+    ['porterItems', 'linkedObjectiveId'],
+    ['vrioItems', 'linkedObjectiveId'],
+  ] as const;
+  for (const [collection, field] of optionalObjectiveLinks) {
+    normalized[collection] = normalized[collection].map((item: unknown) => {
+      if (!isRecord(item) || item[field] === undefined || objectiveIds.has(item[field])) return item;
+      return { ...item, [field]: undefined };
+    });
+  }
+  const swotIds = new Set(normalized.swotItems.map((item: RecordValue) => item.id));
+  normalized.swotStrategies = normalized.swotStrategies.map((strategy: unknown) => {
+    if (!isRecord(strategy) || !Array.isArray(strategy.related_swot_ids)) return strategy;
+    return { ...strategy, related_swot_ids: strategy.related_swot_ids.filter((id: unknown) => swotIds.has(id)) };
+  });
   return normalized;
 }
 
