@@ -255,8 +255,8 @@ export const InitiativePortfolioView: React.FC<InitiativePortfolioViewProps> = (
       if (i.id === initId) {
         let newStatus = i.status;
         if (val === 100) newStatus = 'completed';
-        else if (val < (i.planned_progress || val) - 15) newStatus = 'at_risk';
-        else if (val < (i.planned_progress || val) - 5) newStatus = 'behind';
+        else if (val < (i.planned_progress ?? val) - 15) newStatus = 'at_risk';
+        else if (val < (i.planned_progress ?? val) - 5) newStatus = 'behind';
         else newStatus = 'on_track';
 
         return {
