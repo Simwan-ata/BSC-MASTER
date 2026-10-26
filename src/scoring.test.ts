@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { scoreIndicator, statusOf, wavg } from './scoring';
-import type { Indicator } from './types';
+import { buildScorecard, scoreIndicator, statusOf, wavg } from './scoring';
+import type { DatabaseState, Indicator } from './types';
 
 function indicator(overrides: Partial<Indicator> = {}): Indicator {
   return {
@@ -66,4 +66,36 @@ test('status bands handle invalid values deterministically', () => {
   assert.equal(statusOf(69.9), 'red');
   assert.equal(statusOf(Number.NaN), null);
   assert.equal(statusOf(Number.POSITIVE_INFINITY), null);
+});
+
+test('scorecard reports incomplete perspective coverage instead of implying full data', () => {
+  const db: DatabaseState = {
+    orgs: [{ id: 1, name: 'Holding', parent_id: null }],
+    perspectives: [
+      { id: 1, name: 'Financial', order: 1 },
+      { id: 2, name: 'Customer', order: 2 },
+    ],
+    periods: [{ id: 1, name: 'Q1' }],
+    objectives: [
+      { id: 1, org_id: 1, perspective_id: 1, title: 'Revenue', weight: 1 },
+      { id: 2, org_id: 1, perspective_id: 2, title: 'Customer', weight: 1 },
+    ],
+    indicators: [{
+      id: 1, objective_id: 1, title: 'Revenue target', unit: '%', weight: 1,
+      higher_is_better: true, method: 'achievement', cap: 1.2,
+      yellow_limit: null, green_limit: null,
+    }],
+    measurements: [{ id: 1, indicator_id: 1, period_id: 1, target: 100, actual: 90 }],
+    cascades: [],
+    causes: [],
+    initiatives: [],
+    focusAreas: [],
+    visions: [],
+  };
+
+  const scorecard = buildScorecard(db, 1, 1);
+  assert.equal(scorecard.score, 90);
+  assert.equal(scorecard.coverage, 50);
+  assert.equal(scorecard.perspectives[0].coverage, 100);
+  assert.equal(scorecard.perspectives[1].coverage, 0);
 });
