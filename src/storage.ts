@@ -276,9 +276,15 @@ function validateDatabase(value: unknown): value is DatabaseState {
   return true;
 }
 
-/** Public validation entry point used by regression tests and import flows. */
+/** Strict validation entry point used to guard every in-memory database mutation. */
 export function validateDatabasePayload(value: unknown): value is DatabaseState {
-  return validateDatabase(normalizeDatabase(value));
+  return validateDatabase(value);
+}
+
+/** Normalize a legacy payload and return it only if the migrated result is valid. */
+export function normalizeAndValidateDatabasePayload(value: unknown): DatabaseState | null {
+  const normalized = normalizeDatabase(value);
+  return validateDatabase(normalized) ? normalized as DatabaseState : null;
 }
 
 function preserveRecoveryCopy(raw: string): void {
