@@ -58,6 +58,7 @@ test('legacy backups gain empty newer modules without seeded demo records', () =
 
 test('strategy-analysis links cannot cross organization boundaries', () => {
   const crossOrgObjective = structuredClone(INITIAL_DATABASE);
+  crossOrgObjective.swotStrategies = [];
   crossOrgObjective.swotItems = [{
     id: 990001,
     org_id: 2,
@@ -69,6 +70,7 @@ test('strategy-analysis links cannot cross organization boundaries', () => {
   assert.equal(validateDatabasePayload(crossOrgObjective), false);
 
   const sameOrgObjective = structuredClone(INITIAL_DATABASE);
+  sameOrgObjective.swotStrategies = [];
   sameOrgObjective.swotItems = [{
     id: 990002,
     org_id: 2,
