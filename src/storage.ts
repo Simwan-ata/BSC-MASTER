@@ -80,7 +80,7 @@ function validateDatabase(value: unknown): value is DatabaseState {
     isRecord(x) && finite(x.id) && typeof x.name === 'string' &&
     (x.parent_id === null || x.parent_id === undefined || finite(x.parent_id))
   )) return false;
-  if (!db.perspectives.every((x) => isRecord(x) && finite(x.id) && finite(x.order) && typeof x.name === 'string')) return false;
+  if (!db.perspectives.every((x) => isRecord(x) && finite(x.id) && finite(x.order) && typeof x.name === 'string' && (x.weight === undefined || (finite(x.weight) && x.weight > 0)))) return false;
   if (!db.periods.every((x) => isRecord(x) && finite(x.id) && typeof x.name === 'string')) return false;
   if (!db.objectives.every((x) =>
     isRecord(x) && finite(x.id) && finite(x.org_id) && finite(x.perspective_id) &&
