@@ -58,9 +58,15 @@ export default function App() {
   const [isBackupOpen, setIsBackupOpen] = useState(false);
 
   // Sync to localStorage whenever db changes
-  const updateDb = (newDb: DatabaseState) => {
+  const updateDb = (newDb: DatabaseState): boolean => {
+    if (!saveDatabase(newDb)) {
+      // Defer the error toast until the current handler finishes, so a subsequent
+      // success toast cannot mask a failed localStorage write.
+      setTimeout(() => showToast('ذخیره داده‌ها ناموفق بود؛ فضای ذخیره‌سازی مرورگر را بررسی کنید.', 'error'), 0);
+      return false;
+    }
     setDb(newDb);
-    saveDatabase(newDb);
+    return true;
   };
 
   // Selected Org and Period objects
@@ -426,6 +432,10 @@ export default function App() {
 
   const handleReset = () => {
     const fresh = resetDatabase();
+    if (!fresh) {
+      showToast('بازنشانی ذخیره نشد؛ فضای ذخیره‌سازی مرورگر را بررسی کنید.', 'error');
+      return;
+    }
     setDb(fresh);
     setSelectedOrgId(fresh.orgs[1]?.id || fresh.orgs[0]?.id || 1);
     showToast('پایگاه داده به مقادیر اولیه بازنشانی شد.');
