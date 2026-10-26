@@ -181,7 +181,7 @@ function validateDatabase(value: unknown): value is DatabaseState {
     ))) ||
     (x.evm_periods !== undefined && (!Array.isArray(x.evm_periods) || x.evm_periods.some((snapshot: unknown) =>
       !isRecord(snapshot) || typeof snapshot.period_key !== 'string' ||
-      !/^\d{4}-\d{2}$/.test(snapshot.period_key) ||
+      !/^\d{4}-(0[1-9]|1[0-2])$/.test(snapshot.period_key) ||
       !finite(snapshot.planned_progress) || snapshot.planned_progress < 0 || snapshot.planned_progress > 100 ||
       !finite(snapshot.actual_progress) || snapshot.actual_progress < 0 || snapshot.actual_progress > 100 ||
       !finite(snapshot.actual_cost) || snapshot.actual_cost < 0 ||
