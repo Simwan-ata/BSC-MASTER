@@ -78,4 +78,9 @@ test('EVM history validates periods, numeric domains, and one snapshot per initi
   const invalidProgress = structuredClone(valid);
   invalidProgress.initiatives[0].evm_periods![0].actual_progress = 120;
   assert.equal(validateDatabasePayload(invalidProgress), false);
+
+  const malformedSnapshot = structuredClone(valid) as unknown as { initiatives: Array<{ evm_periods?: unknown[] }> };
+  malformedSnapshot.initiatives[0].evm_periods![0] = null;
+  assert.doesNotThrow(() => validateDatabasePayload(malformedSnapshot));
+  assert.equal(validateDatabasePayload(malformedSnapshot), false);
 });
