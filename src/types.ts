@@ -13,6 +13,8 @@ export interface Perspective {
   id: number;
   name: string;
   order: number;
+  /** Optional strategic importance weight; omitted means equal weighting (1). */
+  weight?: number;
   description?: string;
   color?: string;
 }
