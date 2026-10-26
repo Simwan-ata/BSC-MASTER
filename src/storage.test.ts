@@ -50,3 +50,17 @@ test('legacy backups gain empty newer modules without seeded demo records', () =
   // Validation accepts the normalized copy; the original object remains untouched.
   assert.equal('swotItems' in legacy, false);
 });
+
+test('diagnostic: identify which optional module makes seed data invalid', () => {
+  const keys = [
+    'cascades','causes','initiatives','focusAreas','visions','swotItems','swotStrategies',
+    'bcgItems','megaTrends','weakSignals','wildCards','horizonInitiatives','uncertainties',
+    'scenarios','risks','pestelItems','porterItems','vrioItems','spaceFactors',
+  ];
+  console.log('seed valid:', validateDatabasePayload(INITIAL_DATABASE));
+  for (const key of keys) {
+    const candidate = structuredClone(INITIAL_DATABASE) as unknown as Record<string, unknown>;
+    candidate[key] = [];
+    console.log('empty module', key, validateDatabasePayload(candidate));
+  }
+});
