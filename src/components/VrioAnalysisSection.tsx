@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { createStableId } from '../ids';
 import {
   Gem,
   Award,
@@ -308,7 +309,7 @@ export const VrioAnalysisSection: React.FC<VrioAnalysisSectionProps> = ({
     }
 
     const newItem: VrioItem = {
-      id: Date.now(),
+      id: createStableId((db.vrioItems || []).map((item) => item.id)),
       org_id: selectedOrgId,
       resource_name: newResourceName.trim(),
       category: newCategory,
