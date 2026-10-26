@@ -92,7 +92,7 @@ export const InitiativePortfolioView: React.FC<InitiativePortfolioViewProps> = (
   const [newTitle, setNewTitle] = useState('');
   const [newOwner, setNewOwner] = useState('');
   const [newObjectiveId, setNewObjectiveId] = useState<number>(
-    db.objectives[0]?.id || 1
+    db.objectives.find((objective) => objective.org_id === selectedOrgId)?.id || 0
   );
   const [newStartDate, setNewStartDate] = useState('۱۴۰۵/۰۱/۱۵');
   const [newDueDate, setNewDueDate] = useState('۱۴۰۵/۰۹/۳۰');
@@ -102,7 +102,17 @@ export const InitiativePortfolioView: React.FC<InitiativePortfolioViewProps> = (
 
   // Objectives of current org & map
   const orgObjectives = useMemo(() => {
-    return db.objectives.filter((o) => o.org_id === selectedOrgId || o.org_id === 1);
+    return db.objectives.filter((o) => o.org_id === selectedOrgId);
+  }, [db.objectives, selectedOrgId]);
+
+  useEffect(() => {
+    const validObjectiveIds = new Set(
+      db.objectives.filter((objective) => objective.org_id === selectedOrgId).map((objective) => objective.id)
+    );
+    setNewObjectiveId((currentId) => {
+      if (validObjectiveIds.has(currentId)) return currentId;
+      return db.objectives.find((objective) => objective.org_id === selectedOrgId)?.id || 0;
+    });
   }, [db.objectives, selectedOrgId]);
 
   const objMap = useMemo(() => {
@@ -118,7 +128,7 @@ export const InitiativePortfolioView: React.FC<InitiativePortfolioViewProps> = (
     const list = db.initiatives || [];
     return list.filter((init) => {
       const obj = objMap.get(init.objective_id);
-      return obj && (obj.org_id === selectedOrgId || obj.org_id === 1);
+      return obj && obj.org_id === selectedOrgId;
     });
   }, [db.initiatives, objMap, selectedOrgId]);
 
@@ -307,6 +317,10 @@ export const InitiativePortfolioView: React.FC<InitiativePortfolioViewProps> = (
   };
 
   const handleAddInitiative = () => {
+    if (!orgObjectives.some((objective) => objective.id === newObjectiveId)) {
+      showToast('برای این واحد سازمانی ابتدا یک هدف استراتژیک ثبت کنید.', 'error');
+      return;
+    }
     if (!newTitle.trim()) {
       showToast('لطفاً عنوان ابتکار استراتژیک را وارد کنید.', 'error');
       return;
