@@ -164,7 +164,8 @@ function validateDatabase(value: unknown): value is DatabaseState {
   if (db.focusAreas.some((x) => !isRecord(x) || !orgIds.has(x.org_id) || typeof x.title !== 'string')) return false;
   if (db.initiatives.some((x) => {
     if (!isRecord(x) || !Array.isArray(x.evm_periods)) return false;
-    const keys = x.evm_periods.map((snapshot: any) => snapshot.period_key);
+    if (x.evm_periods.some((snapshot: unknown) => !isRecord(snapshot))) return true;
+    const keys = x.evm_periods.map((snapshot: RecordValue) => snapshot.period_key);
     return new Set(keys).size !== keys.length;
   })) return false;
   if (db.initiatives.some((x) =>
