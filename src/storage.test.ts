@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { INITIAL_DATABASE } from './initialData';
-import { deleteObjectiveCascade, normalizeAndValidateDatabasePayload, validateDatabasePayload } from './storage';
+import { deleteObjectiveCascade, normalizeAndValidateDatabasePayload, restorePreviousDatabase, saveDatabase, validateDatabasePayload } from './storage';
 
 test('built-in database satisfies the same validation as imported backups', () => {
   assert.equal(validateDatabasePayload(INITIAL_DATABASE), true);
@@ -65,4 +65,32 @@ test('objective deletion removes dependent records and detaches optional strateg
   assert.equal(next.porterItems?.some((item) => item.linkedObjectiveId === objectiveId), false);
   assert.equal(next.vrioItems?.some((item) => item.linkedObjectiveId === objectiveId), false);
   assert.equal(validateDatabasePayload(next), true);
+});
+
+test('successful saves retain a recoverable previous database snapshot', () => {
+  const originalDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  const values = new Map<string, string>();
+  const fakeStorage = {
+    get length() { return values.size; },
+    clear() { values.clear(); },
+    getItem(key: string) { return values.get(key) ?? null; },
+    key(index: number) { return [...values.keys()][index] ?? null; },
+    removeItem(key: string) { values.delete(key); },
+    setItem(key: string, value: string) { values.set(String(key), String(value)); },
+  } as Storage;
+  Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: fakeStorage });
+  try {
+    const first = structuredClone(INITIAL_DATABASE);
+    const second = structuredClone(INITIAL_DATABASE);
+    second.orgs[0].name = 'Changed holding name';
+    assert.equal(saveDatabase(first), true);
+    assert.equal(saveDatabase(second), true);
+    assert.equal(JSON.parse(fakeStorage.getItem('bsc_master_db_v1') || '{}').orgs[0].name, 'Changed holding name');
+    const restored = restorePreviousDatabase();
+    assert.equal(restored?.orgs[0].name, first.orgs[0].name);
+    assert.equal(JSON.parse(fakeStorage.getItem('bsc_master_db_v1') || '{}').orgs[0].name, first.orgs[0].name);
+  } finally {
+    if (originalDescriptor) Object.defineProperty(globalThis, 'localStorage', originalDescriptor);
+    else delete (globalThis as typeof globalThis & { localStorage?: Storage }).localStorage;
+  }
 });
