@@ -192,7 +192,6 @@ export const AddObjectiveModal: React.FC<{
         </div>
 
         {validationError && <p role="alert" className="text-rose-600 text-xs">{validationError}</p>}
-        {validationError && <p role="alert" className="text-rose-600 text-xs">{validationError}</p>}
         <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100">
           <button
             type="button"
@@ -460,6 +459,7 @@ export const AddIndicatorModal: React.FC<{
           </div>
         )}
 
+        {validationError && <p role="alert" className="text-rose-600 text-xs">{validationError}</p>}
         <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100">
           <button
             type="button"
