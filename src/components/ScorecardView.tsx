@@ -458,7 +458,7 @@ export const ScorecardView: React.FC<ScorecardViewProps> = ({
 
                       <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
                         <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                          <span>امتیاز شاخص‌ها:</span>
+                          <span>عملکرد مستقیم شاخص‌ها:</span>
                           <StatusBadge
                             status={obj.status}
                             score={obj.score}
