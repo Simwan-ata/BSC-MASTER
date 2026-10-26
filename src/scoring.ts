@@ -77,6 +77,18 @@ function coverageOf(pairs: [number | null, number][]): number | null {
   return Math.round((scoredWeight / totalWeight) * 1000) / 10;
 }
 
+/** Weighted mean of child coverage percentages; missing child coverage counts as zero. */
+function weightedCoveragePercent(pairs: [number | null, number][]): number | null {
+  const configured = pairs.filter(([, weight]) => Number.isFinite(weight) && weight > 0);
+  const totalWeight = configured.reduce((sum, [, weight]) => sum + weight, 0);
+  if (!Number.isFinite(totalWeight) || totalWeight <= 0) return null;
+  const weightedCoverage = configured.reduce(
+    (sum, [coverage, weight]) => sum + (coverage !== null && Number.isFinite(coverage) ? Math.max(0, Math.min(coverage, 100)) : 0) * weight,
+    0,
+  );
+  return Math.round((weightedCoverage / totalWeight) * 10) / 10;
+}
+
 export function calculateObjectiveOwnScore(objectiveId: number, db: DatabaseState, periodId: number): number | null {
   const indicators = db.indicators.filter((indicator) => indicator.objective_id === objectiveId);
   const pairs: [number | null, number][] = indicators.map((indicator) => {
@@ -133,7 +145,7 @@ export function buildScorecard(db: DatabaseState, orgId: number, periodId: numbe
       objectives: scoredObjectives,
       score: perspectiveScore,
       status: statusOf(perspectiveScore),
-      coverage: coverageOf(objectivePairs),
+      coverage: weightedCoveragePercent(scoredObjectives.map((objective) => [objective.coverage, objective.weight] as [number | null, number])),
     };
   });
 
@@ -146,6 +158,6 @@ export function buildScorecard(db: DatabaseState, orgId: number, periodId: numbe
     perspectives: perspectivesResult,
     score: totalScore,
     status: statusOf(totalScore),
-    coverage: coverageOf(perspectivePairs),
+    coverage: weightedCoveragePercent(perspectivesResult.map((perspective) => [perspective.coverage, 1] as [number | null, number])),
   };
 }
