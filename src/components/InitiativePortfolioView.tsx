@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { createStableId } from '../ids';
 import {
   Calendar,
   Clock,
@@ -360,7 +361,7 @@ export const InitiativePortfolioView: React.FC<InitiativePortfolioViewProps> = (
     }
 
     const currentList = db.initiatives || [];
-    const newId = currentList.length > 0 ? Math.max(...currentList.map((i) => i.id)) + 1 : 1;
+    const newId = createStableId(currentList.map((i) => i.id));
 
     const newInit: StrategicInitiative = {
       id: newId,
