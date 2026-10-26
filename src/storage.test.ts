@@ -55,3 +55,27 @@ test('legacy backups gain empty newer modules without seeded demo records', () =
 });
 
 
+
+test('EVM history validates periods, numeric domains, and one snapshot per initiative-period', () => {
+  const valid = structuredClone(INITIAL_DATABASE);
+  const initiative = valid.initiatives[0];
+  initiative.evm_periods = [
+    { period_key: '1405-01', planned_progress: 25, actual_progress: 20, actual_cost: 12 },
+    { period_key: '1405-02', planned_progress: 50, actual_progress: 45, actual_cost: 25 },
+  ];
+  assert.equal(validateDatabasePayload(valid), true);
+
+  const duplicatePeriod = structuredClone(valid);
+  duplicatePeriod.initiatives[0].evm_periods?.push({
+    period_key: '1405-02', planned_progress: 55, actual_progress: 45, actual_cost: 27,
+  });
+  assert.equal(validateDatabasePayload(duplicatePeriod), false);
+
+  const invalidMonth = structuredClone(valid);
+  invalidMonth.initiatives[0].evm_periods![0].period_key = '1405-13';
+  assert.equal(validateDatabasePayload(invalidMonth), false);
+
+  const invalidProgress = structuredClone(valid);
+  invalidProgress.initiatives[0].evm_periods![0].actual_progress = 120;
+  assert.equal(validateDatabasePayload(invalidProgress), false);
+});
