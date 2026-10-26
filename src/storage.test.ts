@@ -91,6 +91,6 @@ test('successful saves retain a recoverable previous database snapshot', () => {
     assert.equal(JSON.parse(fakeStorage.getItem('bsc_master_db_v1') || '{}').orgs[0].name, first.orgs[0].name);
   } finally {
     if (originalDescriptor) Object.defineProperty(globalThis, 'localStorage', originalDescriptor);
-    else delete (globalThis as typeof globalThis & { localStorage?: Storage }).localStorage;
+    else Reflect.deleteProperty(globalThis, 'localStorage');
   }
 });
