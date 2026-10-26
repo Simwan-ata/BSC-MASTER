@@ -362,6 +362,7 @@ export interface ScoredIndicator extends Indicator {
   actual: number | null;
   score: number | null;
   status: StatusType;
+  coverage: number | null;
 }
 
 export interface CascadedChild {
@@ -377,6 +378,7 @@ export interface ScoredObjective extends Objective {
   indicators: ScoredIndicator[];
   score: number | null;
   status: StatusType;
+  coverage: number | null;
   children: CascadedChild[];
   aligned_score: number | null;
   aligned_status: StatusType;
@@ -387,6 +389,7 @@ export interface ScoredPerspective {
   objectives: ScoredObjective[];
   score: number | null;
   status: StatusType;
+  coverage: number | null;
 }
 
 export interface ScorecardResult {
