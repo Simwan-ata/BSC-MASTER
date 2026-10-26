@@ -36,7 +36,7 @@ export function scoreIndicator(
     const y = indicator.yellow_limit;
     const g = indicator.green_limit;
     if (y === null || g === null || !Number.isFinite(y) || !Number.isFinite(g)) return [null, null];
-    if (indicator.higher_is_better ? g < y : g > y) return [null, null];
+    if (indicator.higher_is_better ? g <= y : g >= y) return [null, null];
 
     const status: 'green' | 'yellow' | 'red' = indicator.higher_is_better
       ? actual >= g ? 'green' : actual >= y ? 'yellow' : 'red'
