@@ -117,6 +117,18 @@ function validateDatabase(value: unknown): value is DatabaseState {
   if (db.orgs.some((x) => x.parent_id !== null && x.parent_id !== undefined && !orgIds.has(x.parent_id))) return false;
   // Organization hierarchy must be acyclic.
   const orgParents = new Map(db.orgs.map((org) => [org.id, org.parent_id ?? null]));
+  // A holding can link to its own objectives and descendant-company objectives;
+  // a subsidiary must not link upward into a parent's private strategy records.
+  const canAccessOrg = (recordOrgId: number, targetOrgId: number): boolean => {
+    let current: number | null = targetOrgId;
+    const visited = new Set<number>();
+    while (current !== null && !visited.has(current)) {
+      if (current === recordOrgId) return true;
+      visited.add(current);
+      current = orgParents.get(current) ?? null;
+    }
+    return false;
+  };
   for (const org of db.orgs) {
     const visited = new Set<number>([org.id]);
     let parentId = orgParents.get(org.id) ?? null;
@@ -304,12 +316,16 @@ function validateDatabase(value: unknown): value is DatabaseState {
     const items = (db as any)[collection] as unknown[];
     if (items.some((raw) => {
       if (!isRecord(raw) || raw[linkField] === undefined) return false;
-      return objectiveOrgById.get(raw[linkField]) !== raw.org_id;
+      const targetOrgId = objectiveOrgById.get(raw[linkField]);
+      return targetOrgId === undefined || !canAccessOrg(raw.org_id, targetOrgId);
     })) return false;
   }
   const swotOrgById = new Map((db.swotItems ?? []).map((item) => [item.id, item.org_id]));
   if (db.swotStrategies?.some((strategy) =>
-    strategy.related_swot_ids.some((id) => swotOrgById.get(id) !== strategy.org_id)
+    strategy.related_swot_ids.some((id) => {
+      const targetOrgId = swotOrgById.get(id);
+      return targetOrgId === undefined || !canAccessOrg(strategy.org_id, targetOrgId);
+    })
   )) return false;
 
   return true;
