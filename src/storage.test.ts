@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { INITIAL_DATABASE } from './initialData';
-import { validateDatabasePayload } from './storage';
+import { normalizeAndValidateDatabasePayload, validateDatabasePayload } from './storage';
 
 test('built-in database satisfies the same validation as imported backups', () => {
   assert.equal(validateDatabasePayload(INITIAL_DATABASE), true);
@@ -46,8 +46,11 @@ test('legacy backups gain empty newer modules without seeded demo records', () =
   const legacy = structuredClone(INITIAL_DATABASE) as unknown as Record<string, unknown>;
   delete legacy.swotItems;
   delete legacy.risks;
-  assert.equal(validateDatabasePayload(legacy), true);
-  // Validation accepts the normalized copy; the original object remains untouched.
+  const normalized = normalizeAndValidateDatabasePayload(legacy);
+  assert.ok(normalized);
+  assert.equal(Array.isArray(normalized.swotItems), true);
+  assert.equal(normalized.swotItems?.length, 0);
+  // Migration never mutates the caller's original payload.
   assert.equal('swotItems' in legacy, false);
 });
 
