@@ -162,6 +162,11 @@ function validateDatabase(value: unknown): value is DatabaseState {
   if (db.causes.some((x) => !isRecord(x) || !objectiveIds.has(x.from_id) || !objectiveIds.has(x.to_id) || x.from_id === x.to_id)) return false;
   if (db.initiatives.some((x) => !isRecord(x) || !objectiveIds.has(x.objective_id) || typeof x.title !== 'string')) return false;
   if (db.focusAreas.some((x) => !isRecord(x) || !orgIds.has(x.org_id) || typeof x.title !== 'string')) return false;
+  if (db.initiatives.some((x) => {
+    if (!isRecord(x) || !Array.isArray(x.evm_periods)) return false;
+    const keys = x.evm_periods.map((snapshot: any) => snapshot.period_key);
+    return new Set(keys).size !== keys.length;
+  })) return false;
   if (db.initiatives.some((x) =>
     !isRecord(x) || !objectiveIds.has(x.objective_id) || typeof x.title !== 'string' ||
     typeof x.owner !== 'string' || typeof x.due_date !== 'string' ||
@@ -173,6 +178,14 @@ function validateDatabase(value: unknown): value is DatabaseState {
     (x.milestones !== undefined && (!Array.isArray(x.milestones) || x.milestones.some((m: unknown) =>
       !isRecord(m) || !finite(m.id) || typeof m.title !== 'string' ||
       typeof m.due_date !== 'string' || typeof m.completed !== 'boolean'
+    ))) ||
+    (x.evm_periods !== undefined && (!Array.isArray(x.evm_periods) || x.evm_periods.some((snapshot: unknown) =>
+      !isRecord(snapshot) || typeof snapshot.period_key !== 'string' ||
+      !/^\d{4}-\d{2}$/.test(snapshot.period_key) ||
+      !finite(snapshot.planned_progress) || snapshot.planned_progress < 0 || snapshot.planned_progress > 100 ||
+      !finite(snapshot.actual_progress) || snapshot.actual_progress < 0 || snapshot.actual_progress > 100 ||
+      !finite(snapshot.actual_cost) || snapshot.actual_cost < 0 ||
+      (snapshot.recorded_at !== undefined && typeof snapshot.recorded_at !== 'string')
     )))
   )) return false;
   if (db.focusAreas.some((x) => !isRecord(x) || !orgIds.has(x.org_id) || typeof x.title !== 'string' || typeof x.color !== 'string')) return false;
