@@ -53,21 +53,29 @@ function validateDatabase(value: unknown): value is DatabaseState {
   if (![...LEGACY_ARRAYS, ...STRATEGY_ARRAYS].every((key) => Array.isArray(value[key]))) return false;
   const db = value as unknown as DatabaseState;
 
-  if (!db.orgs.every((x) => isRecord(x) && finite(x.id) && typeof x.name === 'string')) return false;
+  if (!db.orgs.every((x) =>
+    isRecord(x) && finite(x.id) && typeof x.name === 'string' &&
+    (x.parent_id === null || x.parent_id === undefined || finite(x.parent_id))
+  )) return false;
   if (!db.perspectives.every((x) => isRecord(x) && finite(x.id) && finite(x.order) && typeof x.name === 'string')) return false;
   if (!db.periods.every((x) => isRecord(x) && finite(x.id) && typeof x.name === 'string')) return false;
   if (!db.objectives.every((x) =>
     isRecord(x) && finite(x.id) && finite(x.org_id) && finite(x.perspective_id) &&
     finite(x.weight) && x.weight > 0 && typeof x.title === 'string'
   )) return false;
-  if (!db.indicators.every((x) =>
-    isRecord(x) && finite(x.id) && finite(x.objective_id) && finite(x.weight) && x.weight > 0 &&
-    typeof x.title === 'string' && typeof x.higher_is_better === 'boolean' &&
-    (x.method === 'achievement' || x.method === 'threshold') &&
-    (x.cap === undefined || (finite(x.cap) && x.cap > 0)) &&
-    (x.yellow_limit === null || x.yellow_limit === undefined || finite(x.yellow_limit)) &&
-    (x.green_limit === null || x.green_limit === undefined || finite(x.green_limit))
-  )) return false;
+  if (!db.indicators.every((x) => {
+    if (!isRecord(x) || !finite(x.id) || !finite(x.objective_id) || !finite(x.weight) || x.weight <= 0 ||
+        typeof x.title !== 'string' || typeof x.higher_is_better !== 'boolean' ||
+        (x.method !== 'achievement' && x.method !== 'threshold') ||
+        (x.cap !== undefined && (!finite(x.cap) || x.cap <= 0)) ||
+        (x.yellow_limit !== null && x.yellow_limit !== undefined && !finite(x.yellow_limit)) ||
+        (x.green_limit !== null && x.green_limit !== undefined && !finite(x.green_limit))) return false;
+    if (x.method === 'threshold') {
+      if (!finite(x.yellow_limit) || !finite(x.green_limit)) return false;
+      if (x.higher_is_better ? x.green_limit < x.yellow_limit : x.green_limit > x.yellow_limit) return false;
+    }
+    return true;
+  })) return false;
   if (!db.measurements.every((x) =>
     isRecord(x) && finite(x.id) && finite(x.indicator_id) && finite(x.period_id) &&
     (x.target === null || finite(x.target)) && (x.actual === null || finite(x.actual))
@@ -84,6 +92,18 @@ function validateDatabase(value: unknown): value is DatabaseState {
   const objectiveIds = new Set(db.objectives.map((x) => x.id));
   const indicatorIds = new Set(db.indicators.map((x) => x.id));
 
+  if (db.orgs.some((x) => x.parent_id !== null && x.parent_id !== undefined && !orgIds.has(x.parent_id))) return false;
+  // Organization hierarchy must be acyclic.
+  const orgParents = new Map(db.orgs.map((org) => [org.id, org.parent_id ?? null]));
+  for (const org of db.orgs) {
+    const visited = new Set<number>([org.id]);
+    let parentId = orgParents.get(org.id) ?? null;
+    while (parentId !== null) {
+      if (visited.has(parentId)) return false;
+      visited.add(parentId);
+      parentId = orgParents.get(parentId) ?? null;
+    }
+  }
   if (db.objectives.some((x) => !orgIds.has(x.org_id) || !perspectiveIds.has(x.perspective_id))) return false;
   if (db.indicators.some((x) => !objectiveIds.has(x.objective_id))) return false;
   if (db.measurements.some((x) => !indicatorIds.has(x.indicator_id) || !periodIds.has(x.period_id))) return false;
@@ -96,6 +116,27 @@ function validateDatabase(value: unknown): value is DatabaseState {
     !isRecord(x) || !objectiveIds.has(x.parent_id) || !objectiveIds.has(x.child_id) ||
     x.parent_id === x.child_id || !finite(x.weight) || x.weight <= 0
   )) return false;
+  // Alignment links must not contain cycles; cycles make parent-child interpretation ambiguous.
+  const cascadeParents = new Map<number, number[]>();
+  for (const link of db.cascades) {
+    const parents = cascadeParents.get(link.child_id) ?? [];
+    parents.push(link.parent_id);
+    cascadeParents.set(link.child_id, parents);
+  }
+  const visiting = new Set<number>();
+  const visitedCascadeNodes = new Set<number>();
+  const hasCascadeCycle = (nodeId: number): boolean => {
+    if (visiting.has(nodeId)) return true;
+    if (visitedCascadeNodes.has(nodeId)) return false;
+    visiting.add(nodeId);
+    for (const parentId of cascadeParents.get(nodeId) ?? []) {
+      if (hasCascadeCycle(parentId)) return true;
+    }
+    visiting.delete(nodeId);
+    visitedCascadeNodes.add(nodeId);
+    return false;
+  };
+  if (db.objectives.some((objective) => hasCascadeCycle(objective.id))) return false;
   if (db.causes.some((x) => !isRecord(x) || !objectiveIds.has(x.from_id) || !objectiveIds.has(x.to_id) || x.from_id === x.to_id)) return false;
   if (db.initiatives.some((x) => !isRecord(x) || !objectiveIds.has(x.objective_id) || typeof x.title !== 'string')) return false;
   if (db.focusAreas.some((x) => !isRecord(x) || !orgIds.has(x.org_id) || typeof x.title !== 'string')) return false;
@@ -108,7 +149,12 @@ function validateDatabase(value: unknown): value is DatabaseState {
   for (const key of orgScopedArrays) {
     if ((db as any)[key].some((item: unknown) => !isRecord(item) || !orgIds.has(item.org_id))) return false;
   }
+  const swotIds = new Set((db.swotItems ?? []).map((x) => x.id));
   if (db.swotItems?.some((x) => x.linked_objective_id !== undefined && !objectiveIds.has(x.linked_objective_id))) return false;
+  if (db.swotStrategies?.some((x) =>
+    (x.linked_objective_id !== undefined && !objectiveIds.has(x.linked_objective_id)) ||
+    !Array.isArray(x.related_swot_ids) || x.related_swot_ids.some((id) => !swotIds.has(id))
+  )) return false;
   if (db.swotStrategies?.some((x) => x.linked_objective_id !== undefined && !objectiveIds.has(x.linked_objective_id))) return false;
   if (db.risks?.some((x) => x.linked_objective_id !== undefined && !objectiveIds.has(x.linked_objective_id))) return false;
   if (db.pestelItems?.some((x) => x.linkedObjectiveId !== undefined && !objectiveIds.has(x.linkedObjectiveId))) return false;
