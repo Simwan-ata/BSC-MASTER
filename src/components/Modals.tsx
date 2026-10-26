@@ -649,8 +649,10 @@ export const AddCascadeModal: React.FC<{
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!childId || !parentId || childId === parentId) return;
-    onAdd(childId, parentId, parseFloat(weight) || 1.0);
+    const parsedWeight = Number(weight);
+    if (!childId || !parentId || childId === parentId ||
+        !Number.isFinite(parsedWeight) || parsedWeight <= 0) return;
+    onAdd(childId, parentId, parsedWeight);
     onClose();
   };
 
@@ -697,6 +699,7 @@ export const AddCascadeModal: React.FC<{
           </label>
           <input
             type="number"
+            required
             step="0.1"
             min="0.1"
             value={weight}
