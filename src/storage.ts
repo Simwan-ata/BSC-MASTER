@@ -254,6 +254,11 @@ function validateDatabase(value: unknown): value is DatabaseState {
   return true;
 }
 
+/** Public validation entry point used by regression tests and import flows. */
+export function validateDatabasePayload(value: unknown): value is DatabaseState {
+  return validateDatabase(normalizeDatabase(value));
+}
+
 function preserveRecoveryCopy(raw: string): void {
   try {
     localStorage.setItem(RECOVERY_KEY, raw);
