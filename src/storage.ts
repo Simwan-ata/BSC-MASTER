@@ -3,6 +3,7 @@ import { DatabaseState } from './types';
 
 const STORAGE_KEY = 'bsc_master_db_v1';
 const RECOVERY_KEY = 'bsc_master_recovery_v1';
+const PREVIOUS_KEY = 'bsc_master_previous_v1';
 
 const CORE_ARRAYS = ['orgs', 'perspectives', 'periods', 'objectives', 'indicators', 'measurements'] as const;
 const LEGACY_ARRAYS = ['cascades', 'causes', 'initiatives', 'focusAreas', 'visions'] as const;
@@ -342,6 +343,40 @@ export function normalizeAndValidateDatabasePayload(value: unknown): DatabaseSta
   return validateDatabase(normalized) ? normalized as DatabaseState : null;
 }
 
+/**
+ * Deletes an objective and all hard-dependent records atomically in memory.
+ * Optional analysis links are detached rather than deleting the analysis records.
+ */
+export function deleteObjectiveCascade(db: DatabaseState, objectiveId: number): DatabaseState {
+  const indicatorIds = new Set(
+    db.indicators.filter((indicator) => indicator.objective_id === objectiveId).map((indicator) => indicator.id),
+  );
+  const detach = <T extends { linked_objective_id?: number }>(items: T[] | undefined): T[] | undefined =>
+    items?.map((item) => item.linked_objective_id === objectiveId
+      ? { ...item, linked_objective_id: undefined }
+      : item);
+  const detachCamel = <T extends { linkedObjectiveId?: number }>(items: T[] | undefined): T[] | undefined =>
+    items?.map((item) => item.linkedObjectiveId === objectiveId
+      ? { ...item, linkedObjectiveId: undefined }
+      : item);
+
+  return {
+    ...db,
+    objectives: db.objectives.filter((objective) => objective.id !== objectiveId),
+    indicators: db.indicators.filter((indicator) => indicator.objective_id !== objectiveId),
+    measurements: db.measurements.filter((measurement) => !indicatorIds.has(measurement.indicator_id)),
+    causes: db.causes.filter((cause) => cause.from_id !== objectiveId && cause.to_id !== objectiveId),
+    cascades: db.cascades.filter((link) => link.child_id !== objectiveId && link.parent_id !== objectiveId),
+    initiatives: db.initiatives.filter((initiative) => initiative.objective_id !== objectiveId),
+    swotItems: detach(db.swotItems),
+    swotStrategies: detach(db.swotStrategies),
+    risks: detach(db.risks),
+    pestelItems: detachCamel(db.pestelItems),
+    porterItems: detachCamel(db.porterItems),
+    vrioItems: detachCamel(db.vrioItems),
+  };
+}
+
 function preserveRecoveryCopy(raw: string): void {
   try {
     localStorage.setItem(RECOVERY_KEY, raw);
@@ -385,11 +420,42 @@ export function loadDatabase(): DatabaseState {
 
 export function saveDatabase(data: DatabaseState): boolean {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    const serialized = JSON.stringify(data);
+    const previous = localStorage.getItem(STORAGE_KEY);
+    // Commit the new primary record first. A quota failure while saving a
+    // recovery snapshot must never turn a successful primary save into failure.
+    localStorage.setItem(STORAGE_KEY, serialized);
+    if (previous && previous !== serialized) {
+      try {
+        localStorage.setItem(PREVIOUS_KEY, previous);
+      } catch (backupError) {
+        console.warn('Primary data was saved, but the previous-version recovery snapshot could not be refreshed.', backupError);
+      }
+    }
     return true;
   } catch (error) {
-    console.error('Unable to save BSC-MASTER data. Check browser storage or export a backup.', error);
+    console.error('Unable to save BSC-MASTER data. Export a backup and check browser storage.', error);
     return false;
+  }
+}
+
+/** Restore the last successfully saved pre-change snapshot after explicit user confirmation. */
+export function restorePreviousDatabase(): DatabaseState | null {
+  try {
+    const raw = localStorage.getItem(PREVIOUS_KEY);
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    const normalized = normalizeDatabase(parsed);
+    if (!validateDatabase(normalized)) return null;
+    const restored = normalized as DatabaseState;
+    const current = localStorage.getItem(STORAGE_KEY);
+    if (current) preserveRecoveryCopy(current);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(restored));
+    localStorage.setItem(PREVIOUS_KEY, current ?? raw);
+    return restored;
+  } catch (error) {
+    console.error('Unable to restore the previous BSC-MASTER snapshot.', error);
+    return null;
   }
 }
 
