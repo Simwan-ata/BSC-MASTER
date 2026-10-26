@@ -43,7 +43,7 @@ test('database validation rejects organization and cascade cycles', () => {
 });
 
 test('legacy backups gain empty newer modules without seeded demo records', () => {
-  const legacy = structuredClone(INITIAL_DATABASE) as Record<string, unknown>;
+  const legacy = structuredClone(INITIAL_DATABASE) as unknown as Record<string, unknown>;
   delete legacy.swotItems;
   delete legacy.risks;
   assert.equal(validateDatabasePayload(legacy), true);
