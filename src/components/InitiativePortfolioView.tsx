@@ -46,6 +46,7 @@ import {
   EvmPeriodSnapshot,
 } from '../types';
 import { toFa } from '../scoring';
+import { aggregateEvmHistory, calculateLatestEvmMetrics } from '../evm';
 
 interface InitiativePortfolioViewProps {
   db: DatabaseState;
@@ -213,20 +214,10 @@ export const InitiativePortfolioView: React.FC<InitiativePortfolioViewProps> = (
       0
     );
 
-    // EVM indices are calculated only from recorded time-phased snapshots; never infer 1.0 when history is missing.
-    const latestPeriod = initiatives.flatMap((initiative) => initiative.evm_periods ?? [])
-      .map((snapshot) => snapshot.period_key).sort().at(-1);
-    const evmRows = initiatives.flatMap((initiative) => {
-      const snapshot = (initiative.evm_periods ?? []).find((item) => item.period_key === latestPeriod);
-      if (!snapshot) return [];
-      const bac = initiative.budget_allocated ?? 0;
-      return [{ pv: bac * snapshot.planned_progress / 100, ev: bac * snapshot.actual_progress / 100, ac: snapshot.actual_cost }];
-    });
-    const evmPv = evmRows.reduce((sum, row) => sum + row.pv, 0);
-    const evmEv = evmRows.reduce((sum, row) => sum + row.ev, 0);
-    const evmAc = evmRows.reduce((sum, row) => sum + row.ac, 0);
-    const spi = evmPv > 0 ? Number((evmEv / evmPv).toFixed(2)) : null;
-    const cpi = evmAc > 0 ? Number((evmEv / evmAc).toFixed(2)) : null;
+    // EVM indices use only recorded snapshots from the same reporting period.
+    const evmMetrics = calculateLatestEvmMetrics(initiatives);
+    const spi = evmMetrics.spi === null ? null : Number(evmMetrics.spi.toFixed(2));
+    const cpi = evmMetrics.cpi === null ? null : Number(evmMetrics.cpi.toFixed(2));
 
     return {
       total,
@@ -244,49 +235,9 @@ export const InitiativePortfolioView: React.FC<InitiativePortfolioViewProps> = (
   }, [initiatives]);
 
   // Real time-phased EVM data: aggregate cumulative observations by reporting period.
-  const evmHistory = useMemo(() => {
-    const byPeriod = new Map<string, { month: string; planned: number; earned: number; cost: number; sim?: number }>();
-    initiatives.forEach((initiative) => {
-      const bac = initiative.budget_allocated ?? 0;
-      (initiative.evm_periods ?? []).forEach((snapshot) => {
-        const point = byPeriod.get(snapshot.period_key) ?? {
-          month: snapshot.period_key,
-          planned: 0,
-          earned: 0,
-          cost: 0,
-        };
-        point.planned += bac * snapshot.planned_progress / 100;
-        point.earned += bac * snapshot.actual_progress / 100;
-        point.cost += snapshot.actual_cost;
-        byPeriod.set(snapshot.period_key, point);
-      });
-    });
-    return [...byPeriod.values()].sort((a, b) => a.month.localeCompare(b.month));
-  }, [initiatives]);
+  const evmHistory = useMemo(() => aggregateEvmHistory(initiatives), [initiatives]);
 
-  const latestEvm = useMemo(() => {
-    const latestPeriod = initiatives.flatMap((initiative) => initiative.evm_periods ?? [])
-      .map((snapshot) => snapshot.period_key).sort().at(-1);
-    const latestByInitiative = initiatives.flatMap((initiative) => {
-      const snapshot = (initiative.evm_periods ?? []).find((item) => item.period_key === latestPeriod);
-      if (!snapshot) return [];
-      const bac = initiative.budget_allocated ?? 0;
-      return [{ bac, pv: bac * snapshot.planned_progress / 100, ev: bac * snapshot.actual_progress / 100, ac: snapshot.actual_cost }];
-    });
-    const totals = latestByInitiative.reduce((sum, row) => ({
-      bac: sum.bac + row.bac, pv: sum.pv + row.pv, ev: sum.ev + row.ev, ac: sum.ac + row.ac,
-    }), { bac: 0, pv: 0, ev: 0, ac: 0 });
-    const cpi = totals.ac > 0 ? totals.ev / totals.ac : null;
-    return {
-      ...totals,
-      period: latestPeriod ?? null,
-      projectsWithHistory: latestByInitiative.length,
-      projectsInScope: initiatives.length,
-      spi: totals.pv > 0 ? totals.ev / totals.pv : null,
-      cpi,
-      eac: totals.ev > 0 && cpi !== null ? totals.bac / cpi : null,
-    };
-  }, [initiatives]);
+  const latestEvm = useMemo(() => calculateLatestEvmMetrics(initiatives), [initiatives]);
 
   useEffect(() => {
     if (!initiatives.some((initiative) => initiative.id === evmTargetId)) {
@@ -609,7 +560,7 @@ export const InitiativePortfolioView: React.FC<InitiativePortfolioViewProps> = (
                     : 'text-amber-400'
                 }`}
               >
-                {toFa(portfolioStats.cpi, 2)}
+                {portfolioStats.cpi === null ? '—' : toFa(portfolioStats.cpi, 2)}
               </span>
               <span className="text-[10px] text-slate-400">
                 {portfolioStats.cpi === null ? 'داده دوره‌ای ثبت نشده' : (portfolioStats.cpi >= 1.0 ? 'صرفه‌جویی بودجه' : 'انحراف بودجه')}
