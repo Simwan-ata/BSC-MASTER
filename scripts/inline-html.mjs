@@ -26,7 +26,7 @@ for (const match of jsScripts) {
   if (!assetPath.startsWith(distDir + path.sep)) throw new Error('Unexpected JavaScript asset path');
   let js = await readFile(assetPath, 'utf8');
   js = js.replace(/<\/script/gi, '<\\/script');
-  html = html.replace(match[0], '<script type="module">\n' + js + '\n</script>');
+  html = html.replace(match[0], () => '<script type="module">\n' + js + '\n</script>');
 }
 
 const outputPath = path.join(distDir, 'BSC-MASTER-standalone.html');
