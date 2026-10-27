@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { createStableId } from '../ids';
 import {
   Swords,
   Users,
@@ -285,7 +286,7 @@ export const PorterFiveForcesSection: React.FC<PorterFiveForcesSectionProps> = (
       showToast('عامل پنج نیروی پورتر با موفقیت ویرایش شد.', 'success');
     } else {
       const newId =
-        currentList.length > 0 ? Math.max(...currentList.map((i) => i.id)) + 1 : 1;
+        createStableId(currentList.map((i) => i.id));
       const newItem: PorterForceItem = {
         id: newId,
         org_id: selectedOrgId,
@@ -323,7 +324,7 @@ export const PorterFiveForcesSection: React.FC<PorterFiveForcesSectionProps> = (
     const swotType = item.intensity >= 3 ? 'threat' : 'opportunity';
     const importance = item.intensity >= 4 ? 'high' : item.intensity === 3 ? 'medium' : 'low';
     const currentSwot = db.swotItems || [];
-    const newId = currentSwot.length > 0 ? Math.max(...currentSwot.map((s) => s.id)) + 1 : 1;
+    const newId = createStableId(currentSwot.map((s) => s.id));
 
     const newSwotItem: SwotItem = {
       id: newId,

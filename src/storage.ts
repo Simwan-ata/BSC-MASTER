@@ -3,6 +3,7 @@ import { DatabaseState } from './types';
 
 const STORAGE_KEY = 'bsc_master_db_v1';
 const RECOVERY_KEY = 'bsc_master_recovery_v1';
+const PREVIOUS_KEY = 'bsc_master_previous_v1';
 
 const CORE_ARRAYS = ['orgs', 'perspectives', 'periods', 'objectives', 'indicators', 'measurements'] as const;
 const LEGACY_ARRAYS = ['cascades', 'causes', 'initiatives', 'focusAreas', 'visions'] as const;
@@ -79,7 +80,7 @@ function validateDatabase(value: unknown): value is DatabaseState {
     isRecord(x) && finite(x.id) && typeof x.name === 'string' &&
     (x.parent_id === null || x.parent_id === undefined || finite(x.parent_id))
   )) return false;
-  if (!db.perspectives.every((x) => isRecord(x) && finite(x.id) && finite(x.order) && typeof x.name === 'string')) return false;
+  if (!db.perspectives.every((x) => isRecord(x) && finite(x.id) && finite(x.order) && typeof x.name === 'string' && (x.weight === undefined || (finite(x.weight) && x.weight > 0)))) return false;
   if (!db.periods.every((x) => isRecord(x) && finite(x.id) && typeof x.name === 'string')) return false;
   if (!db.objectives.every((x) =>
     isRecord(x) && finite(x.id) && finite(x.org_id) && finite(x.perspective_id) &&
@@ -117,6 +118,18 @@ function validateDatabase(value: unknown): value is DatabaseState {
   if (db.orgs.some((x) => x.parent_id !== null && x.parent_id !== undefined && !orgIds.has(x.parent_id))) return false;
   // Organization hierarchy must be acyclic.
   const orgParents = new Map(db.orgs.map((org) => [org.id, org.parent_id ?? null]));
+  // A holding can link to its own objectives and descendant-company objectives;
+  // a subsidiary must not link upward into a parent's private strategy records.
+  const canAccessOrg = (recordOrgId: number, targetOrgId: number): boolean => {
+    let current: number | null = targetOrgId;
+    const visited = new Set<number>();
+    while (current !== null && !visited.has(current)) {
+      if (current === recordOrgId) return true;
+      visited.add(current);
+      current = orgParents.get(current) ?? null;
+    }
+    return false;
+  };
   for (const org of db.orgs) {
     const visited = new Set<number>([org.id]);
     let parentId = orgParents.get(org.id) ?? null;
@@ -162,6 +175,12 @@ function validateDatabase(value: unknown): value is DatabaseState {
   if (db.causes.some((x) => !isRecord(x) || !objectiveIds.has(x.from_id) || !objectiveIds.has(x.to_id) || x.from_id === x.to_id)) return false;
   if (db.initiatives.some((x) => !isRecord(x) || !objectiveIds.has(x.objective_id) || typeof x.title !== 'string')) return false;
   if (db.focusAreas.some((x) => !isRecord(x) || !orgIds.has(x.org_id) || typeof x.title !== 'string')) return false;
+  if (db.initiatives.some((x) => {
+    if (!isRecord(x) || !Array.isArray(x.evm_periods)) return false;
+    if (x.evm_periods.some((snapshot: unknown) => !isRecord(snapshot))) return true;
+    const keys = x.evm_periods.map((snapshot: RecordValue) => snapshot.period_key);
+    return new Set(keys).size !== keys.length;
+  })) return false;
   if (db.initiatives.some((x) =>
     !isRecord(x) || !objectiveIds.has(x.objective_id) || typeof x.title !== 'string' ||
     typeof x.owner !== 'string' || typeof x.due_date !== 'string' ||
@@ -173,6 +192,14 @@ function validateDatabase(value: unknown): value is DatabaseState {
     (x.milestones !== undefined && (!Array.isArray(x.milestones) || x.milestones.some((m: unknown) =>
       !isRecord(m) || !finite(m.id) || typeof m.title !== 'string' ||
       typeof m.due_date !== 'string' || typeof m.completed !== 'boolean'
+    ))) ||
+    (x.evm_periods !== undefined && (!Array.isArray(x.evm_periods) || x.evm_periods.some((snapshot: unknown) =>
+      !isRecord(snapshot) || typeof snapshot.period_key !== 'string' ||
+      !/^\d{4}-(0[1-9]|1[0-2])$/.test(snapshot.period_key) ||
+      !finite(snapshot.planned_progress) || snapshot.planned_progress < 0 || snapshot.planned_progress > 100 ||
+      !finite(snapshot.actual_progress) || snapshot.actual_progress < 0 || snapshot.actual_progress > 100 ||
+      !finite(snapshot.actual_cost) || snapshot.actual_cost < 0 ||
+      (snapshot.recorded_at !== undefined && typeof snapshot.recorded_at !== 'string')
     )))
   )) return false;
   if (db.focusAreas.some((x) => !isRecord(x) || !orgIds.has(x.org_id) || typeof x.title !== 'string' || typeof x.color !== 'string')) return false;
@@ -273,6 +300,35 @@ function validateDatabase(value: unknown): value is DatabaseState {
   if (db.pestelItems?.some((x) => x.linkedObjectiveId !== undefined && !objectiveIds.has(x.linkedObjectiveId))) return false;
   if (db.porterItems?.some((x) => x.linkedObjectiveId !== undefined && !objectiveIds.has(x.linkedObjectiveId))) return false;
   if (db.vrioItems?.some((x) => x.linkedObjectiveId !== undefined && !objectiveIds.has(x.linkedObjectiveId))) return false;
+
+  // Strategy-analysis records and their linked objectives must belong to the same
+  // organization. Existence-only checks allow cross-organization links that look
+  // valid structurally but contaminate local strategy and risk reporting.
+  const objectiveOrgById = new Map(db.objectives.map((objective) => [objective.id, objective.org_id]));
+  const sameOrgLinks = [
+    ['swotItems', 'linked_objective_id'],
+    ['swotStrategies', 'linked_objective_id'],
+    ['risks', 'linked_objective_id'],
+    ['pestelItems', 'linkedObjectiveId'],
+    ['porterItems', 'linkedObjectiveId'],
+    ['vrioItems', 'linkedObjectiveId'],
+  ] as const;
+  for (const [collection, linkField] of sameOrgLinks) {
+    const items = (db as any)[collection] as unknown[];
+    if (items.some((raw) => {
+      if (!isRecord(raw) || raw[linkField] === undefined) return false;
+      const targetOrgId = objectiveOrgById.get(raw[linkField]);
+      return targetOrgId === undefined || !canAccessOrg(raw.org_id, targetOrgId);
+    })) return false;
+  }
+  const swotOrgById = new Map((db.swotItems ?? []).map((item) => [item.id, item.org_id]));
+  if (db.swotStrategies?.some((strategy) =>
+    strategy.related_swot_ids.some((id) => {
+      const targetOrgId = swotOrgById.get(id);
+      return targetOrgId === undefined || !canAccessOrg(strategy.org_id, targetOrgId);
+    })
+  )) return false;
+
   return true;
 }
 
@@ -285,6 +341,40 @@ export function validateDatabasePayload(value: unknown): value is DatabaseState 
 export function normalizeAndValidateDatabasePayload(value: unknown): DatabaseState | null {
   const normalized = normalizeDatabase(value);
   return validateDatabase(normalized) ? normalized as DatabaseState : null;
+}
+
+/**
+ * Deletes an objective and all hard-dependent records atomically in memory.
+ * Optional analysis links are detached rather than deleting the analysis records.
+ */
+export function deleteObjectiveCascade(db: DatabaseState, objectiveId: number): DatabaseState {
+  const indicatorIds = new Set(
+    db.indicators.filter((indicator) => indicator.objective_id === objectiveId).map((indicator) => indicator.id),
+  );
+  const detach = <T extends { linked_objective_id?: number }>(items: T[] | undefined): T[] | undefined =>
+    items?.map((item) => item.linked_objective_id === objectiveId
+      ? { ...item, linked_objective_id: undefined }
+      : item);
+  const detachCamel = <T extends { linkedObjectiveId?: number }>(items: T[] | undefined): T[] | undefined =>
+    items?.map((item) => item.linkedObjectiveId === objectiveId
+      ? { ...item, linkedObjectiveId: undefined }
+      : item);
+
+  return {
+    ...db,
+    objectives: db.objectives.filter((objective) => objective.id !== objectiveId),
+    indicators: db.indicators.filter((indicator) => indicator.objective_id !== objectiveId),
+    measurements: db.measurements.filter((measurement) => !indicatorIds.has(measurement.indicator_id)),
+    causes: db.causes.filter((cause) => cause.from_id !== objectiveId && cause.to_id !== objectiveId),
+    cascades: db.cascades.filter((link) => link.child_id !== objectiveId && link.parent_id !== objectiveId),
+    initiatives: db.initiatives.filter((initiative) => initiative.objective_id !== objectiveId),
+    swotItems: detach(db.swotItems),
+    swotStrategies: detach(db.swotStrategies),
+    risks: detach(db.risks),
+    pestelItems: detachCamel(db.pestelItems),
+    porterItems: detachCamel(db.porterItems),
+    vrioItems: detachCamel(db.vrioItems),
+  };
 }
 
 function preserveRecoveryCopy(raw: string): void {
@@ -330,11 +420,42 @@ export function loadDatabase(): DatabaseState {
 
 export function saveDatabase(data: DatabaseState): boolean {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    const serialized = JSON.stringify(data);
+    const previous = localStorage.getItem(STORAGE_KEY);
+    // Commit the new primary record first. A quota failure while saving a
+    // recovery snapshot must never turn a successful primary save into failure.
+    localStorage.setItem(STORAGE_KEY, serialized);
+    if (previous && previous !== serialized) {
+      try {
+        localStorage.setItem(PREVIOUS_KEY, previous);
+      } catch (backupError) {
+        console.warn('Primary data was saved, but the previous-version recovery snapshot could not be refreshed.', backupError);
+      }
+    }
     return true;
   } catch (error) {
-    console.error('Unable to save BSC-MASTER data. Check browser storage or export a backup.', error);
+    console.error('Unable to save BSC-MASTER data. Export a backup and check browser storage.', error);
     return false;
+  }
+}
+
+/** Restore the last successfully saved pre-change snapshot after explicit user confirmation. */
+export function restorePreviousDatabase(): DatabaseState | null {
+  try {
+    const raw = localStorage.getItem(PREVIOUS_KEY);
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    const normalized = normalizeDatabase(parsed);
+    if (!validateDatabase(normalized)) return null;
+    const restored = normalized as DatabaseState;
+    const current = localStorage.getItem(STORAGE_KEY);
+    if (current) preserveRecoveryCopy(current);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(restored));
+    localStorage.setItem(PREVIOUS_KEY, current ?? raw);
+    return restored;
+  } catch (error) {
+    console.error('Unable to restore the previous BSC-MASTER snapshot.', error);
+    return null;
   }
 }
 
@@ -370,7 +491,10 @@ export function importDatabaseJson(
       }
       const migrated = normalized as DatabaseState;
       // Import is committed only after full validation and successful persistence.
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
+      // Reuse the normal save path so the pre-import database is retained for recovery.
+      if (!saveDatabase(migrated)) {
+        throw new Error('ذخیره نسخه واردشده ناموفق بود؛ داده فعلی تغییر نکرد.');
+      }
       onSuccess(migrated);
     } catch (error) {
       onError(error instanceof Error ? error.message : 'خطا در خواندن فایل JSON');

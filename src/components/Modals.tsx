@@ -735,8 +735,10 @@ export const BackupModal: React.FC<{
   onExport: () => void;
   onImport: (file: File) => void;
   onReset: () => void;
-}> = ({ isOpen, onClose, onExport, onImport, onReset }) => {
+  onRestorePrevious: () => void;
+}> = ({ isOpen, onClose, onExport, onImport, onReset, onRestorePrevious }) => {
   const [confirmReset, setConfirmReset] = useState(false);
+  const [confirmRestore, setConfirmRestore] = useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -767,6 +769,48 @@ export const BackupModal: React.FC<{
             <Download className="w-3.5 h-3.5" />
             <span>دانلود فایل پشتیبان (Export)</span>
           </button>
+        </div>
+
+        {/* Previous local version */}
+        <div className="p-4 border border-amber-200 rounded-xl bg-amber-50/40 space-y-2">
+          <h4 className="font-bold text-amber-900 flex items-center gap-1.5">
+            <RotateCcw className="w-4 h-4 text-amber-700" />
+            بازیابی نسخه قبلی در همین مرورگر
+          </h4>
+          <p className="text-amber-800 text-[11px] leading-relaxed">
+            پیش از آخرین ذخیره موفق، یک نسخه محلی نگهداری می‌شود. این نسخه با حذف داده‌های مرورگر یا خرابی دستگاه از بین می‌رود و جایگزین فایل پشتیبان مستقل نیست.
+          </p>
+          {confirmRestore ? (
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  onRestorePrevious();
+                  setConfirmRestore(false);
+                  onClose();
+                }}
+                className="flex-1 py-1.5 bg-amber-700 hover:bg-amber-800 text-white rounded font-medium"
+              >
+                تأیید بازیابی نسخه قبلی
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmRestore(false)}
+                className="px-3 py-1.5 bg-white text-slate-700 border border-slate-200 rounded"
+              >
+                انصراف
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmRestore(true)}
+              className="w-full py-2 bg-white hover:bg-amber-100 text-amber-800 border border-amber-200 font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>بازیابی آخرین نسخه محلی</span>
+            </button>
+          )}
         </div>
 
         {/* Import */}

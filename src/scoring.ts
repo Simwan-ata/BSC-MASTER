@@ -44,11 +44,15 @@ export function scoreIndicator(
     return [{ green: 100, yellow: 70, red: 30 }[status], status];
   }
 
-  if (target === null || target === undefined || !Number.isFinite(target) || target === 0) return [null, null];
+  if (target === null || target === undefined || !Number.isFinite(target) || target <= 0) return [null, null];
+  // Ratio achievement is defined for non-negative measurements and a positive target.
+  // Indicators whose legitimate domain includes negative values should use explicit
+  // threshold limits until a dedicated domain formula is configured.
+  if (actual < 0) return [null, null];
   const cap = Number.isFinite(indicator.cap) && indicator.cap > 0 ? indicator.cap : 1.2;
   // A zero actual value is the best possible result for a lower-is-better indicator.
   const ratio = indicator.higher_is_better ? actual / target : actual === 0 ? cap : target / actual;
-  if (!Number.isFinite(ratio)) return [null, null];
+  if (!Number.isFinite(ratio) || ratio < 0) return [null, null];
   const rounded = Math.round(Math.max(0, Math.min(ratio, cap)) * 1000) / 10;
   return [rounded, statusOf(rounded)];
 }
@@ -149,8 +153,13 @@ export function buildScorecard(db: DatabaseState, orgId: number, periodId: numbe
     };
   });
 
-  // Perspective weights are intentionally equal until the data model supports explicit weights.
-  const perspectivePairs = perspectivesResult.map((perspective) => [perspective.score, 1] as [number | null, number]);
+  // Explicit positive perspective weights are honored; omitted weights default to 1
+  // for backward compatibility and the documented equal-weight policy.
+  const perspectivePairs = perspectivesResult.map((result) => {
+    const configured = result.perspective.weight;
+    const weight = configured === undefined ? 1 : configured;
+    return [result.score, weight] as [number | null, number];
+  });
   const totalScore = wavg(perspectivePairs);
   return {
     org_id: orgId,
@@ -158,6 +167,9 @@ export function buildScorecard(db: DatabaseState, orgId: number, periodId: numbe
     perspectives: perspectivesResult,
     score: totalScore,
     status: statusOf(totalScore),
-    coverage: weightedCoveragePercent(perspectivesResult.map((perspective) => [perspective.coverage, 1] as [number | null, number])),
+    coverage: weightedCoveragePercent(perspectivesResult.map((result) => [
+      result.coverage,
+      result.perspective.weight === undefined ? 1 : result.perspective.weight,
+    ] as [number | null, number])),
   };
 }

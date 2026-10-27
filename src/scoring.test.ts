@@ -99,3 +99,69 @@ test('scorecard reports incomplete perspective coverage instead of implying full
   assert.equal(scorecard.perspectives[0].coverage, 100);
   assert.equal(scorecard.perspectives[1].coverage, 0);
 });
+
+test('ratio achievement rejects negative-domain data instead of producing misleading scores', () => {
+  assert.deepEqual(scoreIndicator(indicator(), 100, -5), [null, null]);
+  assert.deepEqual(scoreIndicator(indicator(), -100, 50), [null, null]);
+  assert.deepEqual(scoreIndicator(indicator({ higher_is_better: false }), 20, -1), [null, null]);
+  assert.deepEqual(scoreIndicator(indicator({ higher_is_better: false }), 20, 0), [120, 'green']);
+});
+
+test('explicit perspective weights affect organization score; omitted weights default to equal', () => {
+  const db: DatabaseState = {
+    orgs: [{ id: 1, name: 'Holding', parent_id: null }],
+    perspectives: [
+      { id: 1, name: 'Financial', order: 1, weight: 3 },
+      { id: 2, name: 'Customer', order: 2, weight: 1 },
+    ],
+    periods: [{ id: 1, name: 'Q1' }],
+    objectives: [
+      { id: 1, org_id: 1, perspective_id: 1, title: 'Revenue', weight: 1 },
+      { id: 2, org_id: 1, perspective_id: 2, title: 'Customer', weight: 1 },
+    ],
+    indicators: [
+      { ...indicator(), id: 1, objective_id: 1 },
+      { ...indicator(), id: 2, objective_id: 2 },
+    ],
+    measurements: [
+      { id: 1, indicator_id: 1, period_id: 1, target: 100, actual: 100 },
+      { id: 2, indicator_id: 2, period_id: 1, target: 100, actual: 50 },
+    ],
+    cascades: [], causes: [], initiatives: [], focusAreas: [], visions: [],
+  };
+  const weighted = buildScorecard(db, 1, 1);
+  assert.equal(weighted.score, 87.5);
+  assert.equal(weighted.coverage, 100);
+
+  db.perspectives.forEach((perspective) => { delete perspective.weight; });
+  const equal = buildScorecard(db, 1, 1);
+  assert.equal(equal.score, 75);
+});
+
+test('direct objective performance remains separate from subsidiary alignment score', () => {
+  const db: DatabaseState = {
+    orgs: [
+      { id: 1, name: 'Holding', parent_id: null },
+      { id: 2, name: 'Subsidiary', parent_id: 1 },
+    ],
+    perspectives: [{ id: 1, name: 'Financial', order: 1 }],
+    periods: [{ id: 1, name: 'Q1' }],
+    objectives: [
+      { id: 1, org_id: 1, perspective_id: 1, title: 'Holding objective', weight: 1 },
+      { id: 2, org_id: 2, perspective_id: 1, title: 'Subsidiary objective', weight: 1 },
+    ],
+    indicators: [
+      { ...indicator(), id: 1, objective_id: 1 },
+      { ...indicator(), id: 2, objective_id: 2 },
+    ],
+    measurements: [
+      { id: 1, indicator_id: 1, period_id: 1, target: 100, actual: 60 },
+      { id: 2, indicator_id: 2, period_id: 1, target: 100, actual: 100 },
+    ],
+    cascades: [{ id: 1, parent_id: 1, child_id: 2, weight: 1 }],
+    causes: [], initiatives: [], focusAreas: [], visions: [],
+  };
+  const result = buildScorecard(db, 1, 1);
+  assert.equal(result.perspectives[0].objectives[0].score, 60);
+  assert.equal(result.perspectives[0].objectives[0].aligned_score, 100);
+});

@@ -6,8 +6,11 @@ import {
   validateDatabasePayload,
   exportDatabaseJson,
   importDatabaseJson,
+  deleteObjectiveCascade,
+  restorePreviousDatabase,
 } from './storage';
-import { DatabaseState, StatusType } from './types';
+import { DatabaseState, Indicator, StrategicInitiative, StatusType } from './types';
+import { createStableId } from './ids';
 import { buildScorecard } from './scoring';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
@@ -17,6 +20,7 @@ import { AlignmentCascadeView } from './components/AlignmentCascadeView';
 import { CascadeView } from './components/CascadeView';
 import { AnalyticsView } from './components/AnalyticsView';
 import { StrategicSuiteView } from './components/StrategicSuiteView';
+import { StrategicTraceabilitySummary } from './components/StrategicTraceabilitySummary';
 import { InitiativePortfolioView } from './components/InitiativePortfolioView';
 import {
   AddObjectiveModal,
@@ -128,7 +132,7 @@ export default function App() {
       };
     } else {
       const newId =
-        Math.max(...db.measurements.map((m) => m.id), 0) + 1;
+        createStableId(db.measurements.map((m) => m.id));
       updatedMeasurements.push({
         id: newId,
         indicator_id: indicatorId,
@@ -151,7 +155,7 @@ export default function App() {
     weight: number;
     description?: string;
   }) => {
-    const newId = Math.max(...db.objectives.map((o) => o.id), 0) + 1;
+    const newId = createStableId(db.objectives.map((o) => o.id));
     const newObjective = {
       id: newId,
       ...data,
@@ -180,57 +184,31 @@ export default function App() {
       title: 'حذف هدف استراتژیک',
       message: 'آیا از حذف این هدف استراتژیک اطمینان دارید؟ تمامی شاخص‌ها و پیوندهای وابسته نیز حذف خواهند شد.',
       onConfirm: () => {
-        const indicatorIdsToRemove = db.indicators
-          .filter((i) => i.objective_id === objectiveId)
-          .map((i) => i.id);
-
-        updateDb({
-          ...db,
-          objectives: db.objectives.filter((o) => o.id !== objectiveId),
-          indicators: db.indicators.filter((i) => i.objective_id !== objectiveId),
-          measurements: db.measurements.filter(
-            (m) => !indicatorIdsToRemove.includes(m.indicator_id)
-          ),
-          causes: db.causes.filter(
-            (c) => c.from_id !== objectiveId && c.to_id !== objectiveId
-          ),
-          cascades: db.cascades.filter(
-            (c) => c.child_id !== objectiveId && c.parent_id !== objectiveId
-          ),
-          initiatives: (db.initiatives || []).filter((item) => item.objective_id !== objectiveId),
-          swotItems: (db.swotItems || []).map((item) => ({
-            ...item,
-            linked_objective_id: item.linked_objective_id === objectiveId ? undefined : item.linked_objective_id,
-          })),
-          swotStrategies: (db.swotStrategies || []).map((item) => ({
-            ...item,
-            linked_objective_id: item.linked_objective_id === objectiveId ? undefined : item.linked_objective_id,
-          })),
-          risks: (db.risks || []).map((item) => ({
-            ...item,
-            linked_objective_id: item.linked_objective_id === objectiveId ? undefined : item.linked_objective_id,
-          })),
-          pestelItems: (db.pestelItems || []).map((item) => ({
-            ...item,
-            linkedObjectiveId: item.linkedObjectiveId === objectiveId ? undefined : item.linkedObjectiveId,
-          })),
-          porterItems: (db.porterItems || []).map((item) => ({
-            ...item,
-            linkedObjectiveId: item.linkedObjectiveId === objectiveId ? undefined : item.linkedObjectiveId,
-          })),
-          vrioItems: (db.vrioItems || []).map((item) => ({
-            ...item,
-            linkedObjectiveId: item.linkedObjectiveId === objectiveId ? undefined : item.linkedObjectiveId,
-          })),
-        });
+        const nextDb = deleteObjectiveCascade(db, objectiveId);
+        updateDb(nextDb);
         showToast('هدف استراتژیک با موفقیت حذف شد.');
         setConfirmDialog(null);
       },
     });
   };
 
-  const handleAddIndicator = (data: any) => {
-    const newId = Math.max(...db.indicators.map((i) => i.id), 0) + 1;
+  const handleUpdatePerspectiveWeight = (perspectiveId: number, weight: number) => {
+    if (!Number.isFinite(weight) || weight <= 0) {
+      showToast('وزن منظر باید عددی مثبت باشد.', 'error');
+      return;
+    }
+    const perspectives = db.perspectives.map((perspective) =>
+      perspective.id === perspectiveId ? { ...perspective, weight } : perspective
+    );
+    if (updateDb({ ...db, perspectives })) {
+      showToast('وزن منظر ذخیره شد.');
+    } else {
+      showToast('ذخیره وزن منظر ناموفق بود.', 'error');
+    }
+  };
+
+  const handleAddIndicator = (data: Omit<Indicator, 'id'>) => {
+    const newId = createStableId(db.indicators.map((i) => i.id));
     const newIndicator = {
       id: newId,
       ...data,
@@ -259,7 +237,7 @@ export default function App() {
   };
 
   const handleAddOrg = (data: { name: string; parent_id: number | null }) => {
-    const newId = Math.max(...db.orgs.map((o) => o.id), 0) + 1;
+    const newId = createStableId(db.orgs.map((o) => o.id));
     const newOrg = {
       id: newId,
       ...data,
@@ -273,7 +251,7 @@ export default function App() {
   };
 
   const handleAddCause = (fromId: number, toId: number) => {
-    const newId = Math.max(...db.causes.map((c) => c.id), 0) + 1;
+    const newId = createStableId(db.causes.map((c) => c.id));
     updateDb({
       ...db,
       causes: [...db.causes, { id: newId, from_id: fromId, to_id: toId }],
@@ -322,7 +300,7 @@ export default function App() {
       return;
     }
 
-    const newId = Math.max(...db.cascades.map((c) => c.id), 0) + 1;
+    const newId = createStableId(db.cascades.map((c) => c.id));
     updateDb({
       ...db,
       cascades: [
@@ -341,8 +319,8 @@ export default function App() {
     showToast('پیوند هم‌راستایی حذف شد.');
   };
 
-  const handleAddInitiative = (data: any) => {
-    const newId = Math.max(...(db.initiatives || []).map((i) => i.id), 0) + 1;
+  const handleAddInitiative = (data: Omit<StrategicInitiative, 'id'>) => {
+    const newId = createStableId((db.initiatives || []).map((i) => i.id));
     const newInit = { id: newId, ...data };
     updateDb({
       ...db,
@@ -439,6 +417,22 @@ export default function App() {
     );
   };
 
+  const handleRestorePrevious = () => {
+    const restored = restorePreviousDatabase();
+    if (!restored) {
+      showToast('نسخه قبلی قابل بازیابی نیست یا داده‌های آن معتبر نیستند.', 'error');
+      return;
+    }
+    setDb(restored);
+    setSelectedOrgId((current) => restored.orgs.some((org) => org.id === current)
+      ? current
+      : restored.orgs[1]?.id || restored.orgs[0]?.id || 1);
+    setSelectedPeriodId((current) => restored.periods.some((period) => period.id === current)
+      ? current
+      : restored.periods.find((period) => period.is_active)?.id || restored.periods[0]?.id || 1);
+    showToast('نسخه قبلی محلی بازیابی شد.');
+  };
+
   const handleReset = () => {
     const fresh = resetDatabase();
     if (!fresh) {
@@ -506,6 +500,7 @@ export default function App() {
                   }}
                   onDeleteIndicator={handleDeleteIndicator}
                   onDeleteObjective={handleDeleteObjective}
+                  onUpdatePerspectiveWeight={handleUpdatePerspectiveWeight}
                 />
               )}
 
@@ -555,12 +550,15 @@ export default function App() {
               )}
 
               {activeTab === 'strategy_tools' && (
-                <StrategicSuiteView
+                <>
+                  <StrategicTraceabilitySummary db={db} selectedOrgId={selectedOrgId} />
+                  <StrategicSuiteView
                   db={db}
                   selectedOrgId={selectedOrgId}
                   onUpdateDb={updateDb}
                   showToast={showToast}
-                />
+                  />
+                </>
               )}
             </>
           ) : (
@@ -626,6 +624,7 @@ export default function App() {
         onExport={handleExport}
         onImport={handleImport}
         onReset={handleReset}
+        onRestorePrevious={handleRestorePrevious}
       />
 
       {/* Confirmation Dialog (in-app modal replacing window.confirm) */}

@@ -13,6 +13,8 @@ export interface Perspective {
   id: number;
   name: string;
   order: number;
+  /** Optional strategic importance weight; omitted means equal weighting (1). */
+  weight?: number;
   description?: string;
   color?: string;
 }
@@ -76,6 +78,15 @@ export interface InitiativeMilestone {
   completed: boolean;
 }
 
+export interface EvmPeriodSnapshot {
+  /** Reporting period in sortable YYYY-MM format (Gregorian or local calendar as used by the organization). */
+  period_key: string;
+  planned_progress: number; // 0-100; used to calculate PV from BAC
+  actual_progress: number; // 0-100; used to calculate EV from BAC
+  actual_cost: number; // actual cost for this period, cumulative to period end, in billion Rials
+  recorded_at?: string;
+}
+
 export interface StrategicInitiative {
   id: number;
   objective_id: number;
@@ -88,6 +99,7 @@ export interface StrategicInitiative {
   budget_spent?: number; // میلیارد ریال
   progress: number; // 0 - 100 actual progress
   planned_progress?: number; // 0 - 100 planned progress
+  evm_periods?: EvmPeriodSnapshot[]; // time-phased, cumulative EVM observations
   status: InitiativeStatus;
   priority?: 'critical' | 'high' | 'medium';
   milestones?: InitiativeMilestone[];
